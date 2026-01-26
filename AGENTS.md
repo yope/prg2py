@@ -8,11 +8,19 @@ This is Phase 2 of the `cbmbas2py` translator project, which converts Commodore 
 
 **Workflow**: `petscii2text.py` (PRG → UTF-8) → `bas2py.py` (UTF-8 → Python) → Executable Python code
 
-## Core Dependencies
+## Coding Style
 
-- **Python 3.8+**: Required for all tools
-- **No external libraries**: Pure Python implementation
-- **Git**: For version control following Linux kernel conventions
+All Python code (source and generated) must adhere to **PEP-8** with these specific rules:
+
+### Code Indentation
+- **Strict TAB characters only** for indentation, except for separating tokens and identifiers (e.g., `print(` `)` spaces)
+- **Spaces allowed** only for token separators, argument delimiters, and within strings
+- Consistent use of single tab character (not expanded to spaces or mixed with spaces)
+
+### Whitespace
+- **No trailing whitespace** allowed in any non-empty code lines
+- **No trailing whitespace** allowed in empty lines
+- Remove all trailing spaces before finalizing code
 
 ## File Structure
 
@@ -257,6 +265,9 @@ Recommended format:
 4. **ELSE Support**: Gotos for else branches must be explicit (no ELSE keyword)
 5. **Fall-through**: Non-target lines must execute sequentially in starting state handler
 6. **State Variables**: Always use `continue` after state assignment to prevent execution of multiple handlers for same state
+7. **Spaces in Indentation**: ALWAYS use TAB characters, never spaces for indentation (PEP-8 exception)
+8. **Trailing Whitespace**: Remove all trailing whitespace from code lines and empty lines
+9. **Editor Config**: Configure source editors to display tabs as tabs, not expand to spaces
 
 ## Environment Setup
 
