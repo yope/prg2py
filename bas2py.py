@@ -56,16 +56,15 @@ class BASICParser:
             raise UnicodeDecodeError("File is not valid UTF-8 encoded")
 
     def _parse_line(self, line_num: int, line_content: str):
-        """Parse a single BASIC line.
+        """Parse a single BASIC line, splitting on colons outside of strings.
 
         Args:
             line_num: Line number in file
             line_content: Content of the line
         """
-        if ':' in line_content:
-            parts = [part.strip() for part in line_content.split(':')]
-        else:
-            parts = [line_content]
+        # Split by colons, but don't split inside quoted strings
+        parts = self._split_colons(line_content)
+        parts = [part.strip() for part in parts]
 
         statements = []
         for part in parts:
@@ -83,6 +82,38 @@ class BASICParser:
             self.coordinate_system.append((line_num, statements))
             self.line_numbers.append(line_num)
             self._update_index_mapping(line_num, len(statements))
+
+    def _split_colons(self, text: str) -> list:
+        """Split text by colons, respecting quoted string boundaries.
+
+        Args:
+            text: Text potentially containing colons within strings
+
+        Returns:
+            List of substrings split at colons outside strings
+        """
+        parts = []
+        current = []
+        in_double_quote = False
+        in_simple_quote = False
+
+        for char in text:
+            if char == '"' and not in_simple_quote:
+                in_double_quote = not in_double_quote
+                current.append(char)
+            elif char == "'" and not in_double_quote:
+                in_simple_quote = not in_simple_quote
+                current.append(char)
+            elif char == ':' and not in_double_quote and not in_simple_quote:
+                parts.append(''.join(current))
+                current = []
+            else:
+                current.append(char)
+
+        if current:
+            parts.append(''.join(current))
+
+        return parts
 
     def _strip_line_number(self, line_content: str) -> str:
         """Strip line number prefix if present.
@@ -120,10 +151,22 @@ class BASICParser:
                 content = statement[3:].strip()
             return {'type': stmt_type, 'content': content, 'raw': statement}
 
-        # Check for keywords in proper order
-        if statement.startswith('PRINT'):
+        # Check for keywords and handle potential missing spaces
+        # This handles cases like "PRINT"HELLO"", "INPUTX", or "IFX=10"
+        if statement.startswith('INPUT'):
+            # Add space after INPUT if next char is alphanumeric or underscore
+            if len(statement) > 5 and statement[5].isalnum():
+                content = 'INPUT ' + statement[5:].strip()
+            else:
+                content = 'INPUT' + statement[5:].lstrip()
+            stmt_type = 'INPUT'
+        elif statement.startswith('PRINT'):
+            # Add space after PRINT if next char is alphanumeric or quote
+            if len(statement) > 5 and (statement[5].isalnum() or statement[5] == '"'):
+                content = 'PRINT' + statement[5:]  # preserve existing space
+            else:
+                content = 'PRINT' + statement[5:].lstrip()
             stmt_type = 'PRINT'
-            content = statement[5:].strip()
         elif statement.startswith('FOR'):
             stmt_type = 'FOR'
             content = statement[3:].strip()
@@ -132,9 +175,7 @@ class BASICParser:
             content = statement[4:].strip()
         elif statement.startswith('GOTO'):
             stmt_type = 'GOTO'
-            # Extract line number after GOTO
             content_part = statement[4:].strip()
-            # Find first number or space
             parts = content_part.split(maxsplit=1)
             content = parts[0] if parts else ''
         elif statement.startswith('GOSUB'):
@@ -148,17 +189,24 @@ class BASICParser:
             parts = content_part.split(maxsplit=1)
             content = parts[0] if parts else ''
         elif statement.startswith('IF'):
+            # Add space after IF if next char is alphanumeric or =
+            if len(statement) > 2 and statement[2].isalnum():
+                content = ' IF ' + statement[2:].lstrip()
+            else:
+                content = ' IF' + statement[2:].lstrip()
             stmt_type = 'IF'
-            content = statement[2:].strip()
         elif statement.startswith('DATA'):
             stmt_type = 'DATA'
             content = statement[4:].strip()
+        elif statement.startswith('DIM'):
+            stmt_type = 'DIM'
+            content = statement[3:].strip()
         elif '=' in statement:
             # Implicit LET
             stmt_type = 'LET'
             content = statement
-        elif ' ' in statement or statement.startswith('"'):
-            # Likely PRINT without keyword or just a string
+        elif ' ' in statement or statement.startswith('"') or statement.startswith('INPUT') or statement.startswith('PRINT') or statement.startswith('REM'):
+            # Likely PRINT without keyword, INPUT without keyword, or just a string
             stmt_type = 'PRINT'
             content = statement
         else:
@@ -176,7 +224,7 @@ class BASICParser:
 
         Args:
             line_num: Line number
-            num_statements: Number of statements in the line
+            num_statements: Number of statements in a line
         """
         for idx in range(num_statements):
             self.index_mapping[(line_num, idx)] = {
@@ -214,7 +262,7 @@ class BASICParser:
 def main():
     """Main entry point for parser demonstration."""
     parser = BASICParser()
-    result = parser.parse_file('example1.bas')
+    result = parser.parse_file('example2.bas')
 
     print(f"Parsed {len(result)} lines:")
     for line_num, statements in result:
