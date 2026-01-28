@@ -233,7 +233,7 @@ git commit -s
 Follow Linux kernel conventions:
 
 ```
-git commit -s -m "Short description
+git commit -m "Short description"
 
 Detailed explanation as needed.
 
