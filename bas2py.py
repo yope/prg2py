@@ -94,25 +94,25 @@ class BASICParser:
             List of substrings split at colons outside strings
         """
         parts = []
-        current = []
+        current = ""
         in_double_quote = False
         in_simple_quote = False
 
         for char in text:
             if char == '"' and not in_simple_quote:
                 in_double_quote = not in_double_quote
-                current.append(char)
+                current += char
             elif char == "'" and not in_double_quote:
                 in_simple_quote = not in_simple_quote
-                current.append(char)
+                current += char
             elif char == ':' and not in_double_quote and not in_simple_quote:
-                parts.append(''.join(current))
-                current = []
+                parts.append(current)
+                current = ""
             else:
-                current.append(char)
+                current += char
 
         if current:
-            parts.append(''.join(current))
+            parts.append(current)
 
         return parts
 
