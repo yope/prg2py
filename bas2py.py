@@ -62,17 +62,18 @@ class BASICParser:
             line_num: Line number in file
             line_content: Content of the line
         """
-        # Split by colons, but don't split inside quoted strings
-        parts = self._split_colons(line_content)
-        parts = [part.strip() for part in parts]
+        # First, strip line number prefix BEFORE splitting
+        base_content = self._strip_line_number(line_content)
+
+        # Now split by colons, but don't split inside quoted strings
+        parts = self._split_colons(base_content)
 
         statements = []
         for part in parts:
             if not part:
                 continue
 
-            # Detect and remove line number prefix
-            statement_content = self._strip_line_number(part)
+            statement_content = part.strip()
             if statement_content:
                 statement_info = self._tokenize_statement(statement_content)
                 if statement_info['type'] != 'UNKNOWN':
