@@ -206,10 +206,6 @@ class BASICParser:
             # Implicit LET
             stmt_type = 'LET'
             content = statement
-        elif ' ' in statement or statement.startswith('"') or statement.startswith('INPUT') or statement.startswith('PRINT') or statement.startswith('REM'):
-            # Likely PRINT without keyword, INPUT without keyword, or just a string
-            stmt_type = 'PRINT'
-            content = statement
         else:
             stmt_type = 'UNKNOWN'
             content = statement
