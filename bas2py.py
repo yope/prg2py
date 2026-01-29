@@ -152,69 +152,39 @@ class BASICParser:
                 content = statement[3:].strip()
             return {'type': stmt_type, 'content': content, 'raw': statement}
 
-        # Check for keywords and handle potential missing spaces
-        # This handles cases like "PRINT"HELLO"", "INPUTX", or "IFX=10"
-        if statement.startswith('INPUT'):
-            # Add space after INPUT if next char is alphanumeric or underscore
-            if len(statement) > 5 and statement[5].isalnum():
-                content = 'INPUT ' + statement[5:].strip()
-            else:
-                content = 'INPUT' + statement[5:].lstrip()
-            stmt_type = 'INPUT'
-        elif statement.startswith('PRINT'):
-            # Add space after PRINT if next char is alphanumeric or quote
-            if len(statement) > 5 and (statement[5].isalnum() or statement[5] == '"'):
-                content = 'PRINT' + statement[5:]  # preserve existing space
-            else:
-                content = 'PRINT' + statement[5:].lstrip()
-            stmt_type = 'PRINT'
-        elif statement.startswith('FOR'):
-            stmt_type = 'FOR'
-            content = statement[3:].strip()
-        elif statement.startswith('NEXT'):
-            stmt_type = 'NEXT'
-            content = statement[4:].strip()
-        elif statement.startswith('GOTO'):
-            stmt_type = 'GOTO'
-            content_part = statement[4:].strip()
-            parts = content_part.split(maxsplit=1)
-            content = parts[0] if parts else ''
-        elif statement.startswith('GOSUB'):
-            stmt_type = 'GOSUB'
-            content_part = statement[5:].strip()
-            parts = content_part.split(maxsplit=1)
-            content = parts[0] if parts else ''
-        elif statement.startswith('RETURN'):
-            stmt_type = 'RETURN'
-            content_part = statement[6:].strip()
-            parts = content_part.split(maxsplit=1)
-            content = parts[0] if parts else ''
-        elif statement.startswith('IF'):
-            # Add space after IF if next char is alphanumeric or =
-            if len(statement) > 2 and statement[2].isalnum():
-                content = ' IF ' + statement[2:].lstrip()
-            else:
-                content = ' IF' + statement[2:].lstrip()
-            stmt_type = 'IF'
-        elif statement.startswith('DATA'):
-            stmt_type = 'DATA'
-            content = statement[4:].strip()
-        elif statement.startswith('DIM'):
-            stmt_type = 'DIM'
-            content = statement[3:].strip()
-        elif '=' in statement:
-            # Implicit LET
+        # List of statement keywords in order of priority
+        keywords = ['INPUT', 'PRINT', 'FOR', 'NEXT', 'GOTO', 'GOSUB', 'RETURN', 'IF', 'DATA', 'DIM']
+
+        # Check each keyword
+        for keyword in keywords:
+            if statement.startswith(keyword):
+                stmt_type = keyword
+                # Extract content after keyword
+                remainder = statement[len(keyword):]
+                if remainder:
+                    # Add space at start if first char is not already a separator
+                    if not remainder[0] in ' \t(':
+                        content = f'{keyword} {remainder.lstrip()}'
+                    else:
+                        content = f'{keyword}{remainder}'
+                else:
+                    content = keyword
+                return {
+                    'type': stmt_type,
+                    'content': content,
+                    'raw': statement
+                }
+
+        # Check for implicit LET
+        if '=' in statement:
             stmt_type = 'LET'
             content = statement
-        else:
-            stmt_type = 'UNKNOWN'
-            content = statement
+            return {'type': stmt_type, 'content': content, 'raw': statement}
 
-        return {
-            'type': stmt_type,
-            'content': content,
-            'raw': statement
-        }
+        # Default case: Unknown statement
+        stmt_type = 'UNKNOWN'
+        content = statement
+        return {'type': stmt_type, 'content': content, 'raw': statement}
 
     def _update_index_mapping(self, line_num: int, num_statements: int):
         """Update index mapping for statements in a line.
