@@ -143,6 +143,9 @@ class BASICParser:
         """
         statement = statement.strip()
 
+        stmt_type = None
+        content = None
+
         # Check for REM first (it can appear anywhere)
         if ' REM ' in statement or ' REM' in statement or (statement.startswith('REM') and len(statement) > 3):
             stmt_type = 'REM'
@@ -150,41 +153,39 @@ class BASICParser:
                 content = statement.split(' REM', 1)[1].strip()
             elif statement.startswith('REM'):
                 content = statement[3:].strip()
-            return {'type': stmt_type, 'content': content, 'raw': statement}
+        else:
+            # List of statement keywords in order of priority
+            keywords = ['INPUT', 'PRINT', 'FOR', 'NEXT', 'GOTO', 'GOSUB', 'RETURN', 'IF', 'DATA', 'DIM']
 
-        # List of statement keywords in order of priority
-        keywords = ['INPUT', 'PRINT', 'FOR', 'NEXT', 'GOTO', 'GOSUB', 'RETURN', 'IF', 'DATA', 'DIM']
-
-        # Check each keyword
-        for keyword in keywords:
-            if statement.startswith(keyword):
-                stmt_type = keyword
-                # Extract content after keyword
-                remainder = statement[len(keyword):]
-                if remainder:
-                    # Add space at start if first char is not already a separator
-                    if not remainder[0] in ' \t(':
-                        content = f'{keyword} {remainder.lstrip()}'
+            # Check each keyword
+            for keyword in keywords:
+                if statement.startswith(keyword):
+                    stmt_type = keyword
+                    # Extract content after keyword
+                    remainder = statement[len(keyword):]
+                    if remainder:
+                        # Add space at start if first char is not already a separator
+                        if not remainder[0] in ' \t(':
+                            content = f'{keyword} {remainder.lstrip()}'
+                        else:
+                            content = f'{keyword}{remainder}'
                     else:
-                        content = f'{keyword}{remainder}'
+                        content = keyword
+                    break
+
+            # Check for implicit LET or unknown statement
+            if stmt_type is None:
+                if '=' in statement:
+                    stmt_type = 'LET'
                 else:
-                    content = keyword
-                return {
-                    'type': stmt_type,
-                    'content': content,
-                    'raw': statement
-                }
+                    stmt_type = 'UNKNOWN'
+                content = statement
 
-        # Check for implicit LET
-        if '=' in statement:
-            stmt_type = 'LET'
-            content = statement
-            return {'type': stmt_type, 'content': content, 'raw': statement}
-
-        # Default case: Unknown statement
-        stmt_type = 'UNKNOWN'
-        content = statement
-        return {'type': stmt_type, 'content': content, 'raw': statement}
+        return {
+            'type': stmt_type,
+            'content': content,
+            'raw': statement
+        }
 
     def _update_index_mapping(self, line_num: int, num_statements: int):
         """Update index mapping for statements in a line.
