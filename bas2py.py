@@ -154,18 +154,8 @@ class BASICParser:
             if statement.startswith(keyword):
                 stmt_type = keyword
                 # Extract content after keyword
-                remainder = statement[len(keyword):]
-                if remainder:
-                    # For REM, always add a space separator
-                    if keyword == 'REM':
-                        content = f'{keyword} {remainder.lstrip()}'
-                    # Add space at start if first char is not already a separator
-                    elif not remainder[0] in ' \t(':
-                        content = f'{keyword} {remainder.lstrip()}'
-                    else:
-                        content = f'{keyword}{remainder}'
-                else:
-                    content = keyword
+                remainder = statement[len(keyword):].lstrip()
+                content = f'{keyword} {remainder}' if remainder else keyword
                 break
 
         # Check for implicit LET or unknown statement
