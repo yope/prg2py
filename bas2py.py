@@ -146,40 +146,35 @@ class BASICParser:
         stmt_type = None
         content = None
 
-        # Check for REM first (it can appear anywhere)
-        if ' REM ' in statement or ' REM' in statement or (statement.startswith('REM') and len(statement) > 3):
-            stmt_type = 'REM'
-            if ' REM' in statement:
-                content = statement.split(' REM', 1)[1].strip()
-            elif statement.startswith('REM'):
-                content = statement[3:].strip()
-        else:
-            # List of statement keywords in order of priority
-            keywords = ['INPUT', 'PRINT', 'FOR', 'NEXT', 'GOTO', 'GOSUB', 'RETURN', 'IF', 'DATA', 'DIM']
+        # List of statement keywords in order of priority
+        keywords = ['REM', 'INPUT', 'PRINT', 'FOR', 'NEXT', 'GOTO', 'GOSUB', 'RETURN', 'IF', 'DATA', 'DIM']
 
-            # Check each keyword
-            for keyword in keywords:
-                if statement.startswith(keyword):
-                    stmt_type = keyword
-                    # Extract content after keyword
-                    remainder = statement[len(keyword):]
-                    if remainder:
-                        # Add space at start if first char is not already a separator
-                        if not remainder[0] in ' \t(':
-                            content = f'{keyword} {remainder.lstrip()}'
-                        else:
-                            content = f'{keyword}{remainder}'
+        # Check each keyword
+        for keyword in keywords:
+            if statement.startswith(keyword):
+                stmt_type = keyword
+                # Extract content after keyword
+                remainder = statement[len(keyword):]
+                if remainder:
+                    # For REM, always add a space separator
+                    if keyword == 'REM':
+                        content = f'{keyword} {remainder.lstrip()}'
+                    # Add space at start if first char is not already a separator
+                    elif not remainder[0] in ' \t(':
+                        content = f'{keyword} {remainder.lstrip()}'
                     else:
-                        content = keyword
-                    break
-
-            # Check for implicit LET or unknown statement
-            if stmt_type is None:
-                if '=' in statement:
-                    stmt_type = 'LET'
+                        content = f'{keyword}{remainder}'
                 else:
-                    stmt_type = 'UNKNOWN'
-                content = statement
+                    content = keyword
+                break
+
+        # Check for implicit LET or unknown statement
+        if stmt_type is None:
+            if '=' in statement:
+                stmt_type = 'LET'
+            else:
+                stmt_type = 'UNKNOWN'
+            content = statement
 
         return {
             'type': stmt_type,
