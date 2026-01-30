@@ -469,60 +469,6 @@ class StateMachineAnalyzer:
 
         return state_mapping
 
-    def analyze_control_flow(self) -> Dict[str, object]:
-        """Analyze the entire control flow graph and generate state mapping.
-
-        Returns:
-            Dictionary containing analysis results
-        """
-        self.state_mapping = self.get_state_mapping()
-
-        # Mark all coordinates initially
-        for line_num, statements in self.coordinate_system:
-            for idx in range(len(statements)):
-                coord = (line_num, idx)
-                self.coordinates_are_targets[coord] = True
-
-        # Get jump targets for all statements
-        self._get_jump_targets()
-
-        # Analyze fall-through chains
-        self._analyze_fallthrough()
-
-        return {
-            'state_mapping': self.state_mapping,
-            'jump_targets': self.jump_targets,
-            'are_targets': self.coordinates_are_targets,
-            'fallthrough': self.fallthrough_chains
-        }
-
-    def analyze_control_flow(self) -> Dict[str, object]:
-        """Analyze the entire control flow graph and generate state mapping.
-
-        Returns:
-            Dictionary containing analysis results
-        """
-        self.state_mapping = self.get_state_mapping()
-
-        # Mark all coordinates initially
-        for line_num, statements in self.coordinate_system:
-            for idx in range(len(statements)):
-                coord = (line_num, idx)
-                self.coordinates_are_targets[coord] = True
-
-        # Get jump targets for all statements
-        self._get_jump_targets()
-
-        # Analyze fall-through chains
-        self._analyze_fallthrough()
-
-        return {
-            'state_mapping': self.state_mapping,
-            'jump_targets': self.jump_targets,
-            'are_targets': self.coordinates_are_targets,
-            'fallthrough': self.fallthrough_chains
-        }
-
     def _get_jump_targets(self):
         """Identify jump targets for all statements."""
         for line_num, statements in self.coordinate_system:
