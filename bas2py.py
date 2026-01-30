@@ -247,6 +247,65 @@ class StateMachineAnalyzer:
         self.return_stack: List[Tuple[int, int]] = []
         self.gosub_stack: List[Tuple[int, int]] = []
 
+    def analyze_control_flow(self) -> Dict[str, object]:
+        """Analyze the entire control flow graph and generate state mapping.
+
+        Returns:
+            Dictionary containing analysis results
+        """
+        self.state_mapping = self.get_state_mapping()
+
+        # Initialize: ALL coordinates are non-targets
+        for line_num, statements in self.coordinate_system:
+            for idx in range(len(statements)):
+                coord = (line_num, idx)
+                self.coordinates_are_targets[coord] = False
+
+        # Get jump targets for all statements
+        self._get_jump_targets()
+
+        # Analyze fall-through chains
+        self._analyze_fallthrough()
+
+        return {
+            'state_mapping': self.state_mapping,
+            'jump_targets': self.jump_targets,
+            'are_targets': self.coordinates_are_targets,
+            'fallthrough': self.fallthrough_chains
+        }
+
+    def _get_jump_targets(self):
+        """Identify jump targets for all statements."""
+        for line_num, statements in self.coordinate_system:
+            for idx, stmt_info in enumerate(statements):
+                coord = (line_num, idx)
+                stmt_type = stmt_info['type']
+                stmt_content = stmt_info['content']
+
+                if stmt_type == 'GOTO':
+                    target_line, target_idx = self._parse_goto_target(stmt_content)
+                    self.coordinates_are_targets[(target_line, 0)] = True
+                    self.jump_targets[coord] = [(target_line, 0)]
+
+                elif stmt_type == 'GOSUB':
+                    target_line, target_idx = self._parse_goto_target(stmt_content)
+                    self.coordinates_are_targets[(target_line, 0)] = True
+                    self.jump_targets[coord] = [(target_line, 0)]
+
+                elif stmt_type == 'RETURN':
+                    target_coord = self._get_return_target()
+                    self.coordinates_are_targets[target_coord] = True
+                    self.jump_targets[coord] = [target_coord]
+
+                elif stmt_type == 'NEXT':
+                    self._handle_next_statement(coord)
+
+                elif stmt_type == 'IF':
+                    self._handle_if_statement(coord)
+
+                elif stmt_type == 'FOR':
+                    self._handle_for_statement(coord, idx)
+
     def _parse_goto_target(self, goto_content: str) -> Tuple[int, int]:
         """Parse GOTO target and get statement index.
 
