@@ -69,14 +69,25 @@ class BASICParser:
         parts = self._split_colons(base_content)
 
         statements = []
+        prev_was_if = False
         for part in parts:
             if not part:
                 continue
 
             statement_content = part.strip()
             if statement_content:
+                # Check for IF short GOTO (number after IF/THEN)
+                if prev_was_if and statement_content.isnumeric():
+                    statement_content = f'GOTO {statement_content}'
+                    prev_was_if = False
+
                 statement_info = self._tokenize_statement(statement_content)
                 if statement_info['type'] != 'UNKNOWN':
+                    # Set prev_was_if only if this is an IF statement
+                    if statement_info['type'] == 'IF':
+                        prev_was_if = True
+                    else:
+                        prev_was_if = False
                     statements.append(statement_info)
 
         if statements:
