@@ -97,7 +97,11 @@ while True:
    - Analyze each line's statement sequence
    - Track next statement automatically by incrementing index
    - IF/THEN: if condition true, continue to next index; if false, jump to next line index_0
-   - FOR/NEXT: NEXT statement just continues to next index/line, loop condition handled in NEXT state
+   - FOR statement: statement immediately following FOR (same line or next line) is a potential target
+   - FOR/NEXT: which NEXT corresponds to which FOR is determined later in Phase 4 analysis
+     NEXT statement has TWO possible branches:
+     - If loop complete: fallthrough to next statement index (index_n+1) in same handler (or next line start)
+     - If loop not complete: jump to statement immediately following the FOR statement (state name determined in Phase 4)
    - GOSUB/RETURN: track return coordinates using stack
 5. Generate state mapping with unique names:
    - All states: `line_<line>_index_<n>` (use consistent naming for everything)
@@ -112,7 +116,10 @@ while True:
 - IF/THEN conditional: both paths start from current index
   - IF true: continue to index_n+1 (no state change)
   - IF false: jump to line_<line>_index_0 (new state, then continue)
-- FOR/NEXT: NEXT is in current state, loop continues via automatic fallthrough
+- FOR statement: statement immediately following FOR is a target that may be needed for NEXT branches
+  - State variable created for the target statement
+  - Whether NEXT branches to fallthrough or jumps forward depends on loop condition
+- NEXT statement: handled as described in subtask 2, with two possible branches (loop complete vs not complete)
 - GOSUB/RETURN: use stack for coordinates; NO state variable change at GOSUB (fallthrough), RETURN pops and changes state
 
 ### Testing Requirements:
