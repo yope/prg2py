@@ -18,7 +18,7 @@ class BASICParser:
 
     def __init__(self):
         """Initialize parser with empty structures."""
-        self.coordinate_system: List[Tuple[int, List[str]]] = []  # [(line, [statements]), ...]
+        self.coordinate_system: List[Tuple[int, List[dict]]] = []  # [(line, [statements]), ...]
         self.index_mapping: Dict[Tuple[int, int], dict] = {}  # [(line, index) -> {statement, type}]
         self.line_numbers: List[int] = []
 
@@ -225,6 +225,321 @@ class BASICParser:
             Sorted list of line numbers
         """
         return sorted(self.line_numbers)
+
+
+class StateMachineAnalyzer:
+    """Analyze BASIC control flow and build state machine structure."""
+
+    def __init__(self, parser: BASICParser):
+        """Initialize analyzer with parser.
+
+        Args:
+            parser: BASICParser instance with parsed data
+        """
+        self.parser = parser
+        self.coordinate_system = parser.get_coordinates()
+        self.index_mapping = parser.get_index_map()
+        self.line_numbers = parser.get_line_numbers()
+
+        self.jump_targets: Dict[Tuple[int, int], List[Tuple[int, int]]] = {}
+        self.coordinates_are_targets: Dict[Tuple[int, int], bool] = {}
+        self.fallthrough_chains: Dict[Tuple[int, int], List[Tuple[int, int]]] = {}
+        self.return_stack: List[Tuple[int, int]] = []
+        self.gosub_stack: List[Tuple[int, int]] = []
+
+    def _parse_goto_target(self, goto_content: str) -> Tuple[int, int]:
+        """Parse GOTO target and get statement index.
+
+        Args:
+            goto_content: GOTO statement content
+
+        Returns:
+            Tuple of (line_number, statement_index)
+        """
+        import re
+        match = re.search(r'GOTO\s+(\d+)', goto_content)
+        if match:
+            target_line = int(match.group(1))
+            target_coord = (target_line, 0)
+            return target_line, 0
+        return target_line, 0
+
+    def _mark_target(self, source_coord: Tuple[int, int], target_coord: Tuple[int, int]):
+        """Mark a coordinate as a target.
+
+        Args:
+            source_coord: (line, index) of statement jumping to target
+            target_coord: (line, index) of target coordinate
+        """
+        coord_key = (source_coord[0], source_coord[1])
+        if coord_key in self.jump_targets:
+            self.jump_targets[coord_key].append(target_coord)
+        else:
+            self.jump_targets[coord_key] = [target_coord]
+
+        self.coordinates_are_targets[target_coord] = True
+
+    def _record_gosub(self, gosub_coord: Tuple[int, int], target_coord: Tuple[int, int]):
+        """Record GOSUB coordinate and push to stack.
+
+        Args:
+            gosub_coord: (line, index) of GOSUB statement
+            target_coord: (line, index) of destination
+        """
+        self.gosub_stack.append(gosub_coord)
+        self.return_stack.append(target_coord)
+
+    def _get_return_target(self) -> Tuple[int, int]:
+        """Get return target from stack.
+
+        Returns:
+            Tuple of (line_number, statement_index)
+
+        Raises:
+            ValueError: If no return targets available
+        """
+        if not self.return_stack:
+            raise ValueError("RETURN statement without matching GOSUB")
+
+        return self.return_stack[-1]
+
+    def _handle_next_statement(self, next_coord: Tuple[int, int]):
+        """Handle NEXT statement - mark fallthrough to next statement.
+
+        Args:
+            next_coord: (line, index) of NEXT statement
+        """
+        line_num, idx = next_coord
+        next_idx = idx + 1
+
+        coord_key = (line_num, idx)
+
+        next_coord_key = (line_num, next_idx)
+        if next_coord_key in self.coordinates_are_targets:
+            self.coordinates_are_targets[next_coord_key] = True
+
+        # NEXT statement falls through to next index in same line
+        if next_coord_key in self.coordinates_are_targets or self._coord_exists(next_coord_key):
+            self.jump_targets[coord_key] = [next_coord_key]
+
+    def _coord_exists(self, coord: Tuple[int, int]) -> bool:
+        """Check if a coordinate exists in the coordinate system.
+
+        Args:
+            coord: (line, index) to check
+
+        Returns:
+            True if coordinate exists, False otherwise
+        """
+        for line_num, statements in self.coordinate_system:
+            if line_num == coord[0] and len(statements) > coord[1]:
+                return True
+        return False
+
+    def _handle_if_statement(self, if_coord: Tuple[int, int]):
+        """Handle IF statement - creates two potential branches.
+
+        Args:
+            if_coord: (line, index) of IF statement
+        """
+        line_num, idx = if_coord
+        coord_key = (line_num, idx)
+        next_idx = idx + 1
+
+        # IF statement falls through to next index (true branch)
+        next_coord_key = (line_num, next_idx)
+        self.jump_targets[coord_key] = [next_coord_key]
+
+        # If false: jump to next line's index 0
+        next_line = line_num + 1
+        false_coord_key = (next_line, 0)
+        self.coordinates_are_targets[false_coord_key] = True
+        self.jump_targets[coord_key].append(false_coord_key)
+
+    def _handle_for_statement(self, for_coord: Tuple[int, int], for_idx: int):
+        """Handle FOR statement - mark statement following it as potential target.
+
+        Args:
+            for_coord: (line, index) of FOR statement
+            for_idx: The index of FOR in the statements list
+        """
+        line_num, idx = for_coord
+        next_idx = for_idx + 1
+
+        # Mark statement after FOR as potential target for NEXT branches
+        next_coord = (line_num, next_idx)
+        self.coordinates_are_targets[next_coord] = True
+
+        # The FOR statement continues to next statement (same line, next index)
+        current_coord = (line_num, idx)
+        next_in_line = (line_num, next_idx)
+        self.jump_targets[current_coord] = [next_in_line]
+
+    def get_state_mapping(self) -> Dict[str, dict]:
+        """Generate unique state names for all coordinates.
+
+        Returns:
+            Dictionary mapping state name -> coordinate info
+        """
+        state_mapping = {}
+        states_used = {}
+
+        for line_num, statements in self.coordinate_system:
+            for idx in range(len(statements)):
+                coord = (line_num, idx)
+
+                if coord in states_used:
+                    continue
+
+                base_name = f"line_{line_num}_index_{idx}"
+                counter = 1
+                state_name = base_name
+
+                while state_name in states_used:
+                    state_name = f"{base_name}_{counter}"
+                    counter += 1
+
+                state_mapping[state_name] = {
+                    'coordinate': coord,
+                    'line': line_num,
+                    'index': idx,
+                    'statement': self.index_mapping.get(coord, {}).get('content', '')
+                }
+
+                states_used[state_name] = True
+
+        return state_mapping
+
+    def analyze_control_flow(self) -> Dict[str, object]:
+        """Analyze the entire control flow graph and generate state mapping.
+
+        Returns:
+            Dictionary containing analysis results
+        """
+        self.state_mapping = self.get_state_mapping()
+
+        # Mark all coordinates initially
+        for line_num, statements in self.coordinate_system:
+            for idx in range(len(statements)):
+                coord = (line_num, idx)
+                self.coordinates_are_targets[coord] = True
+
+        # Get jump targets for all statements
+        self._get_jump_targets()
+
+        # Analyze fall-through chains
+        self._analyze_fallthrough()
+
+        return {
+            'state_mapping': self.state_mapping,
+            'jump_targets': self.jump_targets,
+            'are_targets': self.coordinates_are_targets,
+            'fallthrough': self.fallthrough_chains
+        }
+
+    def analyze_control_flow(self) -> Dict[str, object]:
+        """Analyze the entire control flow graph and generate state mapping.
+
+        Returns:
+            Dictionary containing analysis results
+        """
+        self.state_mapping = self.get_state_mapping()
+
+        # Mark all coordinates initially
+        for line_num, statements in self.coordinate_system:
+            for idx in range(len(statements)):
+                coord = (line_num, idx)
+                self.coordinates_are_targets[coord] = True
+
+        # Get jump targets for all statements
+        self._get_jump_targets()
+
+        # Analyze fall-through chains
+        self._analyze_fallthrough()
+
+        return {
+            'state_mapping': self.state_mapping,
+            'jump_targets': self.jump_targets,
+            'are_targets': self.coordinates_are_targets,
+            'fallthrough': self.fallthrough_chains
+        }
+
+    def _get_jump_targets(self):
+        """Identify jump targets for all statements."""
+        for line_num, statements in self.coordinate_system:
+            for idx, stmt_info in enumerate(statements):
+                coord = (line_num, idx)
+                stmt_type = stmt_info['type']
+                stmt_content = stmt_info['content']
+
+                if stmt_type == 'GOTO':
+                    target_line, target_idx = self._parse_goto_target(stmt_content)
+                    self.jump_targets[coord] = [(target_line, target_idx)]
+                    self.coordinates_are_targets[(target_line, target_idx)] = True
+
+                elif stmt_type == 'GOSUB':
+                    target_line, target_idx = self._parse_goto_target(stmt_content)
+                    self._record_gosub(coord, (target_line, target_idx))
+                    self.jump_targets[coord] = [(target_line, target_idx)]
+                    self.coordinates_are_targets[(target_line, target_idx)] = True
+
+                elif stmt_type == 'RETURN':
+                    target_coord = self._get_return_target()
+                    self.jump_targets[coord] = [target_coord]
+                    self.coordinates_are_targets[target_coord] = True
+
+                elif stmt_type == 'NEXT':
+                    self._handle_next_statement(coord)
+
+                elif stmt_type == 'IF':
+                    self._handle_if_statement(coord)
+
+                elif stmt_type == 'FOR':
+                    self._handle_for_statement(coord, idx)
+
+    def _handle_if_statement(self, if_coord: Tuple[int, int]):
+        """Handle IF statement - creates two potential branches.
+
+        Args:
+            if_coord: (line, index) of IF statement
+        """
+        line_num, idx = if_coord
+        coord_key = (line_num, idx)
+        next_idx = idx + 1
+
+        # IF statement falls through to next index (true branch)
+        next_coord_key = (line_num, next_idx)
+        self.jump_targets[coord_key] = [next_coord_key]
+
+        # If false: jump to next line's index 0
+        next_line = line_num + 1
+        false_coord_key = (next_line, 0)
+        self.coordinates_are_targets[false_coord_key] = True
+        self.jump_targets[coord_key].append(false_coord_key)
+
+    def _analyze_fallthrough(self):
+        """Build fall-through chains for sequential execution."""
+        prev_coord = None
+
+        for line_num, statements in self.coordinate_system:
+            for idx, stmt_info in enumerate(statements):
+                current_coord = (line_num, idx)
+
+                # If this coordinate is not a GOSUB (not on stack), it's a fallthrough continuation
+                on_gosub_stack = any(gosub[0] == current_coord[0] and gosub[1] == current_coord[1] for gosub in self.gosub_stack)
+
+                if not on_gosub_stack:
+                    if prev_coord is not None:
+                        if current_coord not in self.jump_targets.get(prev_coord, []):
+                            chain = self.fallthrough_chains.get(prev_coord, [])
+                            chain.append(current_coord)
+                            self.fallthrough_chains[prev_coord] = chain
+
+                        # If current coord is also a potential target, add to its own chain
+                        if current_coord in self.coordinates_are_targets:
+                            self.fallthrough_chains[current_coord] = []
+
+                    prev_coord = current_coord
 
 
 def main():
