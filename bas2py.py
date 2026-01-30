@@ -111,6 +111,10 @@ class BASICParser:
             else:
                 current += char
 
+            if current.startswith('IF') and current.endswith('THEN') and not in_double_quote and not in_simple_quote:
+                parts.append(current)
+                current = ""
+
         if current:
             parts.append(current)
 

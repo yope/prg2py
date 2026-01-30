@@ -225,7 +225,7 @@ git init
 
 # Create initial commit including project files
 git add FSP.md AGENTS.md petscii2text.py
-git commit -s
+git commit
 ```
 
 ### Commit Style
