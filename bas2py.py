@@ -41,12 +41,15 @@ class BASICParser:
             lines = content.split('\n')
             parsed_lines = []
 
-            for line_num, line_content in enumerate(lines, 1):
+            for file_line_num, line_content in enumerate(lines, 1):
                 line_content = line_content.strip()
                 if not line_content:
                     continue
 
-                self._parse_line(line_num, line_content)
+                # Parse BASIC line number (integer at start)
+                basic_line_num = self._parse_basic_line_number(line_content)
+                # Use _parse_line with BASIC line number, not file line number
+                self._parse_line(basic_line_num, line_content)
 
             return self.coordinate_system
 
@@ -55,12 +58,28 @@ class BASICParser:
         except UnicodeDecodeError:
             raise UnicodeDecodeError("File is not valid UTF-8 encoded")
 
-    def _parse_line(self, line_num: int, line_content: str):
+    def _parse_basic_line_number(self, line_content: str) -> int:
+        """Parse BASIC line number from line content.
+
+        Args:
+            line_content: Content with basic line number prefix
+
+        Returns:
+            BASIC line number as integer
+        """
+        line_content = line_content.strip()
+        # Find first space or tab to separate line number from content
+        for i, char in enumerate(line_content):
+            if char in ' \t':
+                return int(line_content[:i].strip())
+        return int(line_content.strip())
+
+    def _parse_line(self, basic_line_num: int, line_content: str):
         """Parse a single BASIC line, splitting on colons outside of strings.
 
         Args:
-            line_num: Line number in file
-            line_content: Content of the line
+            basic_line_num: BASIC line number
+            line_content: Content of the line (already stripped)
         """
         # First, strip line number prefix BEFORE splitting
         base_content = self._strip_line_number(line_content)
@@ -91,9 +110,9 @@ class BASICParser:
                     statements.append(statement_info)
 
         if statements:
-            self.coordinate_system.append((line_num, statements))
-            self.line_numbers.append(line_num)
-            self._update_index_mapping(line_num, len(statements))
+            self.coordinate_system.append((basic_line_num, statements))
+            self.line_numbers.append(basic_line_num)
+            self._update_index_mapping(basic_line_num, len(statements))
 
     def _split_colons(self, text: str) -> list:
         """Split text by colons, respecting quoted string boundaries.
