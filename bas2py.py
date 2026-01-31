@@ -469,59 +469,6 @@ class StateMachineAnalyzer:
 
         return state_mapping
 
-    def _get_jump_targets(self):
-        """Identify jump targets for all statements."""
-        for line_num, statements in self.coordinate_system:
-            for idx, stmt_info in enumerate(statements):
-                coord = (line_num, idx)
-                stmt_type = stmt_info['type']
-                stmt_content = stmt_info['content']
-
-                if stmt_type == 'GOTO':
-                    target_line, target_idx = self._parse_goto_target(stmt_content)
-                    self.jump_targets[coord] = [(target_line, target_idx)]
-                    self.coordinates_are_targets[(target_line, target_idx)] = True
-
-                elif stmt_type == 'GOSUB':
-                    target_line, target_idx = self._parse_goto_target(stmt_content)
-                    self._record_gosub(coord, (target_line, target_idx))
-                    self.jump_targets[coord] = [(target_line, target_idx)]
-                    self.coordinates_are_targets[(target_line, target_idx)] = True
-
-                elif stmt_type == 'RETURN':
-                    target_coord = self._get_return_target()
-                    self.jump_targets[coord] = [target_coord]
-                    self.coordinates_are_targets[target_coord] = True
-
-                elif stmt_type == 'NEXT':
-                    self._handle_next_statement(coord)
-
-                elif stmt_type == 'IF':
-                    self._handle_if_statement(coord)
-
-                elif stmt_type == 'FOR':
-                    self._handle_for_statement(coord, idx)
-
-    def _handle_if_statement(self, if_coord: Tuple[int, int]):
-        """Handle IF statement - creates two potential branches.
-
-        Args:
-            if_coord: (line, index) of IF statement
-        """
-        line_num, idx = if_coord
-        coord_key = (line_num, idx)
-        next_idx = idx + 1
-
-        # IF statement falls through to next index (true branch)
-        next_coord_key = (line_num, next_idx)
-        self.jump_targets[coord_key] = [next_coord_key]
-
-        # If false: jump to next line's index 0
-        next_line = line_num + 1
-        false_coord_key = (next_line, 0)
-        self.coordinates_are_targets[false_coord_key] = True
-        self.jump_targets[coord_key].append(false_coord_key)
-
     def _analyze_fallthrough(self):
         """Build fall-through chains for sequential execution."""
         prev_coord = None
