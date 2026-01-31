@@ -328,8 +328,17 @@ class StateMachineAnalyzer:
 
                 elif stmt_type == 'GOSUB':
                     target_line, target_idx = self._parse_goto_target(stmt_content)
+
+                    # Target 1: The GOSUB destination
                     self.coordinates_are_targets[(target_line, 0)] = True
                     self.jump_targets[coord] = [(target_line, 0)]
+
+                    # Target 2: The statement following this GOSUB
+                    # This is where control will return to after GOSUB completes
+                    next_coord = self._get_next_coordinates((line_num, idx))
+                    if next_coord is not None:
+                        self.coordinates_are_targets[next_coord] = True
+                        self.jump_targets[coord].append(next_coord)
 
                 elif stmt_type == 'RETURN':
                     target_coord = self._get_return_target()
@@ -358,9 +367,8 @@ class StateMachineAnalyzer:
         match = re.search(r'GOTO\s+(\d+)', goto_content)
         if match:
             target_line = int(match.group(1))
-            target_coord = (target_line, 0)
             return target_line, 0
-        return target_line, 0
+        return -1, -1
 
     def _mark_target(self, source_coord: Tuple[int, int], target_coord: Tuple[int, int]):
         """Mark a coordinate as a target.
@@ -435,24 +443,20 @@ class StateMachineAnalyzer:
         return False
 
     def _handle_if_statement(self, if_coord: Tuple[int, int]):
-        """Handle IF statement - creates two potential branches.
+        """Handle IF statement - creates one potential branch.
 
         Args:
             if_coord: (line, index) of IF statement
         """
         line_num, idx = if_coord
         coord_key = (line_num, idx)
-        next_idx = idx + 1
 
-        # IF statement falls through to next index (true branch)
-        next_coord_key = (line_num, next_idx)
-        self.jump_targets[coord_key] = [next_coord_key]
-
-        # If false: jump to next line's index 0
-        next_line = line_num + 1
+        # Mark next line's first index as potential target (false branch destination)
+        # The IF statement falls through to next index in same line (true branch)
+        # No fallthrough needed, just mark the false branch destination
+        next_line = self.line_numbers[self.line_numbers.index(line_num) + 1]
         false_coord_key = (next_line, 0)
         self.coordinates_are_targets[false_coord_key] = True
-        self.jump_targets[coord_key].append(false_coord_key)
 
     def _handle_for_statement(self, for_coord: Tuple[int, int], for_idx: int):
         """Handle FOR statement - mark statement following it as potential target.
