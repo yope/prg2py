@@ -446,9 +446,14 @@ class StateMachineAnalyzer:
         # Mark next line's first index as potential target (false branch destination)
         # The IF statement falls through to next index in same line (true branch)
         # No fallthrough needed, just mark the false branch destination
-        next_line = self.line_numbers[self.line_numbers.index(line_num) + 1]
-        false_coord_key = (next_line, 0)
-        self.coordinates_are_targets[false_coord_key] = True
+        index = self.line_numbers.index(line_num)
+        try:
+            next_line = self.line_numbers[index + 1]
+            false_coord_key = (next_line, 0)
+            self.coordinates_are_targets[false_coord_key] = True
+        except IndexError:
+            # No next line - IF statement is last line, no false branch to execute
+            pass
 
     def _handle_for_statement(self, for_coord: Tuple[int, int], for_idx: int):
         """Handle FOR statement - mark statement following it as potential target.
