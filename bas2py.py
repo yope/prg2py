@@ -9,7 +9,7 @@ files to UTF-8 text. Phase 2 converts the text to Python.
 
 import argparse
 import sys
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from pathlib import Path
 
 
@@ -246,6 +246,30 @@ class StateMachineAnalyzer:
         self.fallthrough_chains: Dict[Tuple[int, int], List[Tuple[int, int]]] = {}
         self.return_stack: List[Tuple[int, int]] = []
         self.gosub_stack: List[Tuple[int, int]] = []
+
+    def _get_next_coordinates(self, current_coord: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+        """Find the next statement coordinates after the current coordinate.
+
+        Args:
+            current_coord: (line_number, statement_index) of current position
+
+        Returns:
+            (next_line, next_index) of the statement that follows, or None if no more statements
+        """
+        line_num, current_idx = current_coord
+        next_idx = current_idx + 1
+
+        # Check if coordinates exist in our parsed data
+        if (line_num, next_idx) in self.index_mapping:
+            return (line_num, next_idx)
+
+        # Otherwise, find the next line with the first statement
+        for next_line in sorted([l for l in self.line_numbers if l > line_num]):
+            next_statements = self.coordinate_system[next_line]
+            if next_statements:
+                return (next_line, 0)
+
+        return None
 
     def analyze_control_flow(self) -> Dict[str, object]:
         """Analyze the entire control flow graph and generate state mapping.
