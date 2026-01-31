@@ -282,13 +282,9 @@ class StateMachineAnalyzer:
         if (line_num, next_idx) in self.index_mapping:
             return (line_num, next_idx)
 
-        # Otherwise, find the next line with the first statement
-        for next_line in sorted([l for l in self.line_numbers if l > line_num]):
-            next_statements = self.coordinate_system[next_line]
-            if next_statements:
-                return (next_line, 0)
-
-        return None
+        # Get the next line from line_numbers list
+        next_line = self.line_numbers[self.line_numbers.index(line_num) + 1]
+        return (next_line, 0)
 
     def analyze_control_flow(self) -> Dict[str, object]:
         """Analyze the entire control flow graph and generate state mapping.
