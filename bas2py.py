@@ -347,18 +347,18 @@ class StateMachineAnalyzer:
                     self._handle_for_statement(coord, idx)
 
     def _parse_goto_target(self, goto_content: str) -> Tuple[int, int]:
-        """Parse GOTO target and get statement index.
+        """Parse GOTO or GOSUB target and get statement index.
 
         Args:
-            goto_content: GOTO statement content
+            goto_content: GOTO or GOSUB statement content
 
         Returns:
             Tuple of (line_number, statement_index)
         """
         import re
-        match = re.search(r'GOTO\s+(\d+)', goto_content)
+        match = re.search(r'(GOTO|GOSUB)\s+(\d+)', goto_content)
         if match:
-            target_line = int(match.group(1))
+            target_line = int(match.group(2))
             return target_line, 0
         return -1, -1
 
