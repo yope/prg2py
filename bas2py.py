@@ -340,14 +340,6 @@ class StateMachineAnalyzer:
                         self.coordinates_are_targets[next_coord] = True
                         self.jump_targets[coord].append(next_coord)
 
-                elif stmt_type == 'RETURN':
-                    target_coord = self._get_return_target()
-                    self.coordinates_are_targets[target_coord] = True
-                    self.jump_targets[coord] = [target_coord]
-
-                elif stmt_type == 'NEXT':
-                    self._handle_next_statement(coord)
-
                 elif stmt_type == 'IF':
                     self._handle_if_statement(coord)
 
