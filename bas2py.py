@@ -534,10 +534,14 @@ class StateMachineAnalyzer:
                     prev_coord = current_coord
 
 
-def main():
+def main(args):
     """Main entry point for parser demonstration."""
     parser = BASICParser()
-    result = parser.parse_file('example2.bas')
+    if len(args) >= 1:
+        filename = args[0]
+    else:
+        filename = 'example2.bas'
+    result = parser.parse_file(filename)
 
     print(f"Parsed {len(result)} lines:")
     for line_num, statements in result:
@@ -545,6 +549,5 @@ def main():
         for idx, stmt in enumerate(statements):
             print(f"  [{idx}] {stmt['type']}: {stmt['content']}")
 
-
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
