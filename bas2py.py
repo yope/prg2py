@@ -534,6 +534,782 @@ class StateMachineAnalyzer:
                     prev_coord = current_coord
 
 
+class PythonCodeGenerator:
+	"""Generate Python code from analyzed BASIC program."""
+
+	def __init__(self, analyzer: StateMachineAnalyzer, verbose: bool = False):
+		"""Initialize generator with analyzer.
+
+		Args:
+			analyzer: StateMachineAnalyzer with analyzed control flow
+			verbose: Whether to output verbose information
+		"""
+		self.analyzer = analyzer
+		self.parser = analyzer.parser
+		self.verbose = verbose
+		self.output_lines: List[str] = []
+		self.data_constants: List[str] = []
+
+	def generate(self, include_header: bool = True, pretty: bool = False) -> str:
+		"""Generate complete Python source code.
+
+		Args:
+			include_header: Whether to include shebang and docstring
+			pretty: Whether to add extra formatting for readability
+
+		Returns:
+			Complete Python source code as string
+		"""
+		self.output_lines = []
+
+		if include_header:
+			self._generate_header()
+
+		self._generate_data_constants()
+		self._generate_main_function(pretty)
+
+		return '\n'.join(self.output_lines)
+
+	def _generate_header(self):
+		"""Generate file header with shebang and docstring."""
+		self.output_lines.append('#!/usr/bin/env python3')
+		self.output_lines.append('"""')
+		self.output_lines.append('C64 BASIC to Python Translator')
+		self.output_lines.append('Converted from C64 BASIC program')
+		self.output_lines.append('"""')
+		self.output_lines.append('')
+
+	def _generate_data_constants(self):
+		"""Generate DATA constants if any DATA statements exist."""
+		data_values = []
+		for line_num, statements in self.parser.get_coordinates():
+			for stmt in statements:
+				if stmt['type'] == 'DATA':
+					values = self._parse_data_values(stmt['content'])
+					data_values.extend(values)
+
+		if data_values:
+			self.output_lines.append('# DATA constants')
+			self.output_lines.append(f'PROGRAM_DATA = {data_values}')
+			self.output_lines.append('DATA_INDEX = 0')
+			self.output_lines.append('')
+
+	def _parse_data_values(self, data_content: str) -> List:
+		"""Parse DATA statement values.
+
+		Args:
+			data_content: DATA statement content
+
+		Returns:
+			List of parsed values
+		"""
+		import re
+		values = []
+		match = re.search(r'DATA\s+(.+)', data_content)
+		if match:
+			data_part = match.group(1)
+			# Split by comma, respecting quotes
+			parts = self._split_data_values(data_part)
+			for part in parts:
+				part = part.strip()
+				if part.startswith('"') and part.endswith('"'):
+					values.append(part)
+				else:
+					try:
+						if '.' in part:
+							values.append(float(part))
+						else:
+							values.append(int(part))
+					except ValueError:
+						values.append(part)
+		return values
+
+	def _split_data_values(self, data_text: str) -> List[str]:
+		"""Split DATA values by comma, respecting quoted strings.
+
+		Args:
+			data_text: Text after DATA keyword
+
+		Returns:
+			List of individual data values
+		"""
+		parts = []
+		current = ""
+		in_quote = False
+
+		for char in data_text:
+			if char == '"':
+				in_quote = not in_quote
+				current += char
+			elif char == ',' and not in_quote:
+				parts.append(current)
+				current = ""
+			else:
+				current += char
+
+		if current:
+			parts.append(current)
+
+		return parts
+
+	def _generate_main_function(self, pretty: bool = False):
+		"""Generate the main() function with state machine.
+
+		Args:
+			pretty: Whether to add extra formatting for readability
+		"""
+		self.output_lines.append('def main():')
+		self.output_lines.append('	# Initialize state and stacks')
+		self.output_lines.append('	state = "line_{}_index_0"'.format(
+			self.parser.get_line_numbers()[0] if self.parser.get_line_numbers() else 0
+		))
+		self.output_lines.append('	gosub_stack = []')
+		self.output_lines.append('	for_stack = []')
+		self.output_lines.append('')
+		self.output_lines.append('	while True:')
+
+		# Get state mapping and target information
+		state_mapping = self.analyzer.state_mapping
+		are_targets = self.analyzer.coordinates_are_targets
+		fallthrough = self.analyzer.fallthrough_chains
+		jump_targets = self.analyzer.jump_targets
+
+		# Group coordinates into handler blocks
+		# Each block starts with either the first line or a target coordinate
+		handler_blocks = self._build_handler_blocks(state_mapping, are_targets)
+
+		# Generate state handlers in program order
+		first_state = True
+		for block_start_coord, block_coords in handler_blocks:
+			block_state_name = self._coord_to_state_name(block_start_coord, state_mapping)
+
+			if first_state:
+				self.output_lines.append(f'		if state == "{block_state_name}":')
+				first_state = False
+			else:
+				if pretty:
+					self.output_lines.append('')
+				self.output_lines.append(f'		elif state == "{block_state_name}":')
+
+			# Generate all statements in this block (fall-through chain)
+			last_coord = None
+			last_has_control_flow = False
+			for coord in block_coords:
+				stmt_info = self.parser.index_mapping.get(coord, {})
+				if stmt_info:
+					python_code = self._convert_statement(stmt_info, coord, jump_targets)
+				for line in python_code:
+					self.output_lines.append(f'			{line}')
+				# Check if this statement has control flow (continue/break/return)
+				if self._has_control_flow(stmt_info['type'], python_code, stmt_info, coord):
+					last_has_control_flow = True
+				else:
+					last_has_control_flow = False
+				last_coord = coord
+
+			# Handle state transition from the last statement in the block
+			# Only add if the last statement doesn't already have control flow
+			if last_coord and not last_has_control_flow:
+				next_coord = self._get_next_execution_point(last_coord, jump_targets, fallthrough)
+				if next_coord:
+					next_state = self._coord_to_state_name(next_coord, state_mapping)
+					self.output_lines.append(f'			state = "{next_state}"')
+					self.output_lines.append(f'			continue')
+				else:
+					# End of program
+					self.output_lines.append(f'			break')
+
+		# Add else clause for unknown states
+		if pretty:
+			self.output_lines.append('')
+		self.output_lines.append(f'		else:')
+		self.output_lines.append(f'			raise Exception(f"Unknown state: {{state}}")')
+		self.output_lines.append('')
+		self.output_lines.append('')
+		self.output_lines.append("if __name__ == '__main__':")
+		self.output_lines.append(f'	main()')
+
+	def _build_handler_blocks(self, state_mapping: Dict, are_targets: Dict) -> List[Tuple[Tuple[int, int], List[Tuple[int, int]]]]:
+		"""Build handler blocks grouping fall-through statements.
+
+		Args:
+			state_mapping: Dictionary mapping state names to info
+			are_targets: Dictionary indicating if coordinate is a target
+
+		Returns:
+			List of (block_start_coord, [coordinates_in_block]) tuples
+		"""
+		blocks = []
+		current_block = []
+		block_start = None
+
+		# Process coordinates in program order
+		for line_num, statements in self.parser.get_coordinates():
+			for idx in range(len(statements)):
+				coord = (line_num, idx)
+				is_target = are_targets.get(coord, False)
+
+				if is_target or not current_block:
+					# Start a new block
+					if current_block:
+						blocks.append((block_start, current_block))
+					block_start = coord
+					current_block = [coord]
+				else:
+					# Add to current fall-through block
+					current_block.append(coord)
+
+		# Don't forget the last block
+		if current_block:
+			blocks.append((block_start, current_block))
+
+		return blocks
+
+	def _has_control_flow(self, stmt_type: str, python_code: List[str],
+						   stmt_info: dict = None, coord: Tuple[int, int] = None) -> bool:
+		"""Check if generated Python code has control flow statements.
+
+		Args:
+			stmt_type: Type of BASIC statement
+			python_code: Generated Python code lines
+			stmt_info: Optional statement info for context
+			coord: Optional coordinate for checking next statement
+
+		Returns:
+			True if code contains continue/break/return that ends execution
+		"""
+		# Statement types that always have control flow
+		if stmt_type in ['GOTO', 'GOSUB', 'RETURN', 'END', 'NEXT']:
+			return True
+
+		# IF statements with GOTO targets have control flow
+		if stmt_type == 'IF' and coord:
+			line_num, idx = coord
+			next_coord = (line_num, idx + 1)
+			next_stmt = self.parser.index_mapping.get(next_coord, {})
+			if next_stmt and next_stmt['type'] == 'GOTO':
+				return True
+			# Also check for inline THEN <number>
+			if stmt_info:
+				import re
+				content = stmt_info.get('content', '')
+				if re.search(r'THEN\s*\d+', content):
+					return True
+
+		# Check for continue or break in generated code
+		for line in python_code:
+			stripped = line.strip()
+			if stripped.startswith('continue') or stripped.startswith('break'):
+				return True
+			if stripped == 'return' or stripped.startswith('return '):
+				return True
+
+		return False
+
+	def _convert_statement(self, stmt_info: dict, coord: Tuple[int, int],
+						   jump_targets: Dict) -> List[str]:
+		"""Convert a BASIC statement to Python code lines.
+
+		Args:
+			stmt_info: Statement information dictionary
+			coord: (line, index) coordinate of statement
+			jump_targets: Dictionary of jump targets
+
+		Returns:
+			List of Python code lines
+		"""
+		stmt_type = stmt_info['type']
+		content = stmt_info['content']
+		line_num, idx = coord
+
+		if stmt_type == 'REM':
+			rem_text = content[3:].strip() if len(content) > 3 else ''
+			return [f'# {rem_text}']
+
+		elif stmt_type == 'PRINT':
+			return self._convert_print(content)
+
+		elif stmt_type == 'LET':
+			return self._convert_let(content)
+
+		elif stmt_type == 'INPUT':
+			return self._convert_input(content)
+
+		elif stmt_type == 'IF':
+			return self._convert_if(content, coord, jump_targets)
+
+		elif stmt_type == 'GOTO':
+			return self._convert_goto(content, coord)
+
+		elif stmt_type == 'GOSUB':
+			return self._convert_gosub(content, coord, jump_targets)
+
+		elif stmt_type == 'RETURN':
+			return self._convert_return()
+
+		elif stmt_type == 'FOR':
+			return self._convert_for(content, coord)
+
+		elif stmt_type == 'NEXT':
+			return self._convert_next(content, coord)
+
+		elif stmt_type == 'DATA':
+			return ['pass  # DATA statement']
+
+		elif stmt_type == 'READ':
+			return self._convert_read(content)
+
+		elif stmt_type == 'END':
+			return ['break  # END statement']
+
+		else:
+			return [f'# Unknown statement: {content}']
+
+	def _convert_print(self, content: str) -> List[str]:
+		"""Convert PRINT statement to Python print()."""
+		import re
+		match = re.search(r'PRINT\s*(.*)', content)
+		if not match:
+			return ['print()']
+
+		args = match.group(1).strip()
+		if not args:
+			return ['print()']
+
+		semicolon_end = args.endswith(';')
+		if semicolon_end:
+			args = args[:-1].strip()
+
+		parts = self._parse_print_args(args)
+
+		if not parts:
+			return ['print()' if not semicolon_end else 'print(end="")']
+
+		joined = ', '.join(parts)
+		if semicolon_end:
+			return [f'print({joined}, end="")']
+		else:
+			return [f'print({joined})']
+
+	def _parse_print_args(self, args: str) -> List[str]:
+		"""Parse PRINT arguments."""
+		parts = []
+		current = ""
+		in_quote = False
+
+		i = 0
+		while i < len(args):
+			char = args[i]
+			if char == '"':
+				in_quote = not in_quote
+				current += char
+			elif char == ',' and not in_quote:
+				if current.strip():
+					parts.append(self._convert_expression(current.strip()))
+				parts.append('"\\t"')
+				current = ""
+			elif char == ';' and not in_quote:
+				if current.strip():
+					parts.append(self._convert_expression(current.strip()))
+				current = ""
+			else:
+				current += char
+			i += 1
+
+		if current.strip():
+			parts.append(self._convert_expression(current.strip()))
+
+		return parts
+
+	def _convert_let(self, content: str) -> List[str]:
+		"""Convert LET statement to Python assignment."""
+		import re
+		content = re.sub(r'^LET\s*', '', content.strip())
+
+		if '=' in content:
+			parts = content.split('=', 1)
+			var = parts[0].strip()
+			value = parts[1].strip()
+			py_var = self._convert_variable(var)
+			py_value = self._convert_expression(value)
+			return [f'{py_var} = {py_value}']
+
+		return [f'# Invalid LET: {content}']
+
+	def _convert_input(self, content: str) -> List[str]:
+		"""Convert INPUT statement to Python input()."""
+		import re
+		match = re.search(r'INPUT\s+(.+)', content)
+		if not match:
+			return ['# Invalid INPUT statement']
+
+		var_list = match.group(1).strip()
+		vars = [v.strip() for v in var_list.split(',')]
+
+		lines = []
+		for var in vars:
+			py_var = self._convert_variable(var)
+			if var.endswith('$'):
+				lines.append(f'{py_var} = input()')
+			else:
+				lines.append(f'{py_var} = float(input())')
+
+		return lines
+
+	def _convert_if(self, content: str, coord: Tuple[int, int],
+					jump_targets: Dict) -> List[str]:
+		"""Convert IF statement to Python if with state transition."""
+		import re
+		match = re.search(r'IF\s+(.+?)\s*THEN', content)
+		if not match:
+			return [f'# Invalid IF: {content}']
+
+		condition = match.group(1).strip()
+		py_condition = self._convert_condition(condition)
+		lines = []
+
+		line_num, idx = coord
+		next_coord = (line_num, idx + 1)
+		next_stmt = self.parser.index_mapping.get(next_coord, {})
+
+		# Get the next line number for false branch
+		line_numbers = self.parser.get_line_numbers()
+		false_state = None
+		try:
+			line_idx = line_numbers.index(line_num)
+			if line_idx + 1 < len(line_numbers):
+				next_line = line_numbers[line_idx + 1]
+				false_state = f'line_{next_line}_index_0'
+		except ValueError:
+			pass
+
+		if next_stmt and next_stmt['type'] == 'GOTO':
+			# IF THEN GOTO pattern
+			goto_content = next_stmt['content']
+			goto_match = re.search(r'GOTO\s+(\d+)', goto_content)
+			if goto_match:
+				target_line = int(goto_match.group(1))
+				target_state = f'line_{target_line}_index_0'
+
+				# If true, goto target. If false, goto next line.
+				lines.append(f'if {py_condition}:')
+				lines.append(f'	state = "{target_state}"')
+				lines.append(f'	continue')
+				# Add else clause for false branch
+				if false_state and false_state != target_state:
+					lines.append(f'else:')
+					lines.append(f'	# Condition false - go to next line')
+					lines.append(f'	state = "{false_state}"')
+					lines.append(f'	continue')
+		else:
+			# Check for inline THEN target
+			then_match = re.search(r'THEN\s*(\d+)', content)
+			if then_match:
+				target_line = int(then_match.group(1))
+				target_state = f'line_{target_line}_index_0'
+
+				# If true, goto target. If false, goto next line.
+				lines.append(f'if {py_condition}:')
+				lines.append(f'	state = "{target_state}"')
+				lines.append(f'	continue')
+				# Add else clause for false branch
+				if false_state and false_state != target_state:
+					lines.append(f'else:')
+					lines.append(f'	# Condition false - go to next line')
+					lines.append(f'	state = "{false_state}"')
+					lines.append(f'	continue')
+			else:
+				# IF THEN with statement - just check condition, if false skip to next line
+				if false_state:
+					lines.append(f'if not ({py_condition}):')
+					lines.append(f'	state = "{false_state}"')
+					lines.append(f'	continue')
+
+		return lines
+
+	def _convert_goto(self, content: str, coord: Tuple[int, int] = None) -> List[str]:
+		"""Convert GOTO statement to state transition.
+
+		Args:
+			content: GOTO statement content
+			coord: Optional (line, index) to check if this GOTO follows an IF
+
+		Returns:
+			List of Python code lines
+		"""
+		import re
+		match = re.search(r'GOTO\s+(\d+)', content)
+		if not match:
+			return [f'# Invalid GOTO: {content}']
+
+		target_line = int(match.group(1))
+		target_state = f'line_{target_line}_index_0'
+
+		# Check if this GOTO follows an IF statement (IF THEN GOTO pattern)
+		# In this case, the IF already handled the condition, so skip this GOTO
+		if coord:
+			line_num, idx = coord
+			prev_coord = (line_num, idx - 1)
+			prev_stmt = self.parser.index_mapping.get(prev_coord, {})
+			if prev_stmt and prev_stmt['type'] == 'IF':
+				# This GOTO is part of an IF THEN GOTO - skip it
+				return []
+
+		return [
+			f'state = "{target_state}"',
+			'continue'
+		]
+
+	def _convert_gosub(self, content: str, coord: Tuple[int, int],
+					   jump_targets: Dict) -> List[str]:
+		"""Convert GOSUB statement with stack push."""
+		import re
+		match = re.search(r'GOSUB\s+(\d+)', content)
+		if not match:
+			return [f'# Invalid GOSUB: {content}']
+
+		target_line = int(match.group(1))
+		line_num, idx = coord
+		return_coord = (line_num, idx + 1)
+		return_state = f'line_{return_coord[0]}_index_{return_coord[1]}'
+
+		return [
+			f'gosub_stack.append("{return_state}")',
+			f'state = "line_{target_line}_index_0"',
+			'continue'
+		]
+
+	def _convert_return(self) -> List[str]:
+		"""Convert RETURN statement with stack pop."""
+		return [
+			'if not gosub_stack:',
+			'	raise Exception("RETURN without GOSUB")',
+			'state = gosub_stack.pop()',
+			'continue'
+		]
+
+	def _convert_for(self, content: str, coord: Tuple[int, int]) -> List[str]:
+		"""Convert FOR statement to Python loop initialization."""
+		import re
+		match = re.search(r'FOR\s+(\w+)\s*=\s*(.+)\s+TO\s+(.+)', content)
+		if not match:
+			return [f'# Invalid FOR: {content}']
+
+		var = match.group(1)
+		start = match.group(2).strip()
+		end = match.group(3).strip()
+
+		step_val = 1
+		if 'STEP' in end:
+			step_match = re.search(r'(.+)\s+STEP\s+(.+)', end)
+			if step_match:
+				end = step_match.group(1).strip()
+				step_val = step_match.group(2).strip()
+
+		py_var = self._convert_variable(var)
+		py_start = self._convert_expression(start)
+		py_end = self._convert_expression(end)
+		py_step = self._convert_expression(str(step_val))
+
+		# Calculate the loop body target (statement after FOR)
+		line_num, idx = coord
+		loop_body_line = line_num
+		loop_body_idx = idx + 1
+
+		# Check if next statement exists in same line
+		if (line_num, idx + 1) not in self.parser.index_mapping:
+			# Next statement is on next line
+			line_numbers = self.parser.get_line_numbers()
+			try:
+				line_idx = line_numbers.index(line_num)
+				if line_idx + 1 < len(line_numbers):
+					loop_body_line = line_numbers[line_idx + 1]
+					loop_body_idx = 0
+			except ValueError:
+				pass
+
+		loop_body_state = f'line_{loop_body_line}_index_{loop_body_idx}'
+
+		# Store: (loop_var_name, end_value, step_value, loop_body_state)
+		# We'll use a dictionary to track loop variables instead of locals()
+		return [
+			f'{py_var} = {py_start}',
+			f'for_stack.append({{"var": "{py_var}", "end": {py_end}, "step": {py_step}, "body": "{loop_body_state}"}})'
+		]
+
+	def _convert_next(self, content: str, coord: Tuple[int, int]) -> List[str]:
+		"""Convert NEXT statement to loop continuation."""
+		import re
+		match = re.search(r'NEXT\s*(\w*)', content)
+		if not match:
+			return [f'# Invalid NEXT: {content}']
+
+		var = match.group(1).strip()
+
+		# Get next line for fall-through (when loop completes)
+		line_num, idx = coord
+		line_numbers = self.parser.get_line_numbers()
+		next_state = None
+		try:
+			line_idx = line_numbers.index(line_num)
+			if line_idx + 1 < len(line_numbers):
+				next_line = line_numbers[line_idx + 1]
+				next_state = f'line_{next_line}_index_0'
+		except ValueError:
+			pass
+
+		# Build the NEXT logic with proper state transitions
+		lines = [
+			'if not for_stack:',
+			'	raise Exception("NEXT without FOR")',
+			'# Get loop info from dict: {var, end, step, body}',
+			'loop_info = for_stack[-1]',
+			'loop_var = loop_info["var"]',
+			'loop_end = loop_info["end"]',
+			'loop_step = loop_info["step"]',
+			'loop_body = loop_info["body"]',
+			'# Increment loop variable',
+			f'{var} = {var} + loop_step if loop_var == "{var}" else {var}',
+			'# Check if loop should continue',
+			f'if (loop_step >= 0 and {var} > loop_end) or (loop_step < 0 and {var} < loop_end):',
+			'	# Loop complete - remove from stack and continue to next line',
+			'	for_stack.pop()',
+		]
+
+		# Add state transition for loop complete case
+		if next_state:
+			lines.append(f'	state = "{next_state}"')
+			lines.append(f'	continue')
+		else:
+			# No next line - check if we need to RETURN from GOSUB
+			lines.append(f'	if gosub_stack:')
+			lines.append(f'		state = gosub_stack.pop()')
+			lines.append(f'		continue')
+			lines.append(f'	else:')
+			lines.append(f'		break  # End of program')
+
+		lines.extend([
+			'else:',
+			'	# Loop continues - update info in stack and jump back',
+			'	for_stack[-1]["current"] = ' + var,
+			'	state = loop_body',
+			'	continue',
+		])
+
+		return lines
+
+	def _convert_read(self, content: str) -> List[str]:
+		"""Convert READ statement to list indexing."""
+		import re
+		match = re.search(r'READ\s+(.+)', content)
+		if not match:
+			return [f'# Invalid READ: {content}']
+
+		var_list = match.group(1).strip()
+		vars = [v.strip() for v in var_list.split(',')]
+
+		lines = [
+			'if DATA_INDEX >= len(PROGRAM_DATA):',
+			'	raise Exception("READ out of DATA")'
+		]
+
+		for i, var in enumerate(vars):
+			py_var = self._convert_variable(var)
+			lines.append(f'{py_var} = PROGRAM_DATA[DATA_INDEX + {i}]')
+
+		lines.append(f'DATA_INDEX += {len(vars)}')
+
+		return lines
+
+	def _convert_variable(self, var: str) -> str:
+		"""Convert BASIC variable to Python identifier."""
+		if var.endswith('%'):
+			return var[:-1] + '_i'
+		elif var.endswith('$'):
+			return var[:-1] + '_s'
+		else:
+			return var
+
+	def _convert_expression(self, expr: str) -> str:
+		"""Convert BASIC expression to Python."""
+		import re
+
+		# Protect string literals
+		strings = []
+		string_pattern = r'"[^"]*"'
+
+		def protect_string(match):
+			strings.append(match.group(0))
+			return f'__STR_{len(strings)-1}__'
+
+		expr = re.sub(string_pattern, protect_string, expr)
+
+		# Convert variables
+		def replace_var(match):
+			var = match.group(0)
+			return self._convert_variable(var)
+
+		expr = re.sub(r'[A-Z][A-Z0-9]*[%$]?', replace_var, expr)
+
+		# Convert operators
+		expr = expr.replace('=', '==')
+		expr = expr.replace('<>', '!=')
+		expr = expr.replace('><', '!=')
+		expr = expr.replace('====', '==')
+		expr = expr.replace('===', '==')
+
+		# Restore string literals
+		for i, s in enumerate(strings):
+			expr = expr.replace(f'__STR_{i}__', s)
+
+		return expr.strip()
+
+	def _convert_condition(self, condition: str) -> str:
+		"""Convert BASIC condition to Python condition."""
+		return self._convert_expression(condition)
+
+	def _get_next_execution_point(self, coord: Tuple[int, int],
+								   jump_targets: Dict,
+								   fallthrough: Dict) -> Optional[Tuple[int, int]]:
+		"""Determine the next execution point after a statement."""
+		if coord in jump_targets:
+			targets = jump_targets[coord]
+			if targets:
+				if coord in fallthrough and fallthrough[coord]:
+					return fallthrough[coord][0]
+
+		if coord in fallthrough and fallthrough[coord]:
+			return fallthrough[coord][0]
+
+		line_num, idx = coord
+		next_idx = idx + 1
+
+		if (line_num, next_idx) in self.parser.index_mapping:
+			return (line_num, next_idx)
+
+		line_numbers = self.parser.get_line_numbers()
+		try:
+			line_idx = line_numbers.index(line_num)
+			if line_idx + 1 < len(line_numbers):
+				next_line = line_numbers[line_idx + 1]
+				return (next_line, 0)
+		except ValueError:
+			pass
+
+		return None
+
+	def _coord_to_state_name(self, coord: Tuple[int, int],
+							 state_mapping: Dict) -> str:
+		"""Convert coordinate to state name."""
+		line_num, idx = coord
+		base_name = f'line_{line_num}_index_{idx}'
+
+		for state_name, state_info in state_mapping.items():
+			if state_info['coordinate'] == coord:
+				return state_name
+
+		return base_name
+
 def main(args):
     """Main entry point for parser demonstration."""
     parser = BASICParser()
