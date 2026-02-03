@@ -1310,20 +1310,86 @@ class PythonCodeGenerator:
 
 		return base_name
 
-def main(args):
-    """Main entry point for parser demonstration."""
-    parser = BASICParser()
-    if len(args) >= 1:
-        filename = args[0]
-    else:
-        filename = 'example2.bas'
-    result = parser.parse_file(filename)
-
-    print(f"Parsed {len(result)} lines:")
-    for line_num, statements in result:
-        print(f"\nLine {line_num}:")
-        for idx, stmt in enumerate(statements):
-            print(f"  [{idx}] {stmt['type']}: {stmt['content']}")
-
 if __name__ == "__main__":
-    main(sys.argv[1:])
+	import argparse
+
+	parser = argparse.ArgumentParser(
+		description='C64 BASIC to Python Translator',
+		epilog='Converts C64 BASIC programs to executable Python code'
+	)
+	parser.add_argument(
+		'input',
+		metavar='input.bas',
+		help='Input BASIC file (UTF-8 encoded)'
+	)
+	parser.add_argument(
+		'output',
+		metavar='output.py',
+		help='Output Python file'
+	)
+	parser.add_argument(
+		'-v', '--verbose',
+		action='store_true',
+		help='Verbose output during translation'
+	)
+	parser.add_argument(
+		'--no-include-header',
+		action='store_true',
+		help='Skip Python shebang and module docstring'
+	)
+	parser.add_argument(
+		'--pretty-structures',
+		action='store_true',
+		help='Add formatting for readability'
+	)
+
+	args = parser.parse_args()
+
+	try:
+		if args.verbose:
+			print(f"Reading input file: {args.input}")
+
+		# Parse the BASIC file
+		basic_parser = BASICParser()
+		basic_parser.parse_file(args.input)
+
+		if args.verbose:
+			print(f"Parsed {len(basic_parser.get_line_numbers())} lines")
+			print("Analyzing control flow...")
+
+		# Analyze the control flow
+		analyzer = StateMachineAnalyzer(basic_parser)
+		analyzer.analyze_control_flow()
+
+		if args.verbose:
+			print("Generating Python code...")
+
+		# Generate Python code
+		generator = PythonCodeGenerator(analyzer, args.verbose)
+		python_code = generator.generate(
+			include_header=not args.no_include_header,
+			pretty=args.pretty_structures
+		)
+
+		# Write output file
+		if args.verbose:
+			print(f"Writing output file: {args.output}")
+
+		with open(args.output, 'w', encoding='utf-8') as f:
+			f.write(python_code)
+
+		if args.verbose:
+			print(f"Translation complete: {args.input} -> {args.output}")
+
+	except FileNotFoundError:
+		print(f"Error: Input file not found: {args.input}", file=sys.stderr)
+		sys.exit(1)
+	except PermissionError:
+		print(f"Error: Permission denied writing to: {args.output}", file=sys.stderr)
+		sys.exit(1)
+	except Exception as e:
+		print(f"Error: {e}", file=sys.stderr)
+		if args.verbose:
+			import traceback
+			traceback.print_exc()
+		sys.exit(1)
