@@ -284,7 +284,10 @@ class StateMachineAnalyzer:
             return (line_num, next_idx)
 
         # Get the next line from line_numbers list
-        next_line = self.line_numbers[self.line_numbers.index(line_num) + 1]
+        try:
+            next_line = self.line_numbers[self.line_numbers.index(line_num) + 1]
+        except IndexError:
+            return (line_num + 1, 0)
         return (next_line, 0)
 
     def analyze_control_flow(self) -> Dict[str, object]:
