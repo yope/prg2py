@@ -961,6 +961,9 @@ class PythonCodeGenerator:
 		elif stmt_type == 'READ':
 			return self._convert_read(content)
 
+		elif stmt_type == 'DIM':
+			return self._convert_dim(content)
+
 		elif stmt_type == 'END':
 			return ['break  # END statement']
 
@@ -1329,6 +1332,46 @@ class PythonCodeGenerator:
 
 		lines.append(f'DATA_INDEX += {len(vars)}')
 
+		return lines
+
+	def _convert_dim(self, content: str) -> List[str]:
+		"""Convert DIM statement to list variable declarations."""
+		content = content[3:] # Strip 'DIM'
+		print(f"DIM var list: {content}")
+		varlist = []
+		parens = False
+		var = ''
+		dim = []
+		for c in content:
+			if c == '(':
+				dnums = ''
+				parens = True
+			elif c == ')':
+				dim.append(int(dnums))
+				parens = False
+			elif c == ',' and not parens:
+				varlist.append((var, dim))
+				var = ''
+				dim = []
+			elif c == ',' and parens:
+				dim.append(int(dnums))
+			elif c != ' ' and not parens:
+				var += c
+			elif parens:
+				dnums += c
+		varlist.append((var, dim))
+
+		lines = []
+		for var, dim in varlist:
+			name = var.split('(')[0]
+			name = self._convert_variable(name)
+			if name.endswith('_s'):
+				dims = '""'
+			else:
+				dims = '0'
+			for d in dim:
+				dims = f'[{dims}] * {d}'
+			lines.append(f"{name} = {dims}")
 		return lines
 
 	def _convert_variable(self, var: str, onlyname: bool = False) -> str:
