@@ -350,6 +350,9 @@ class StateMachineAnalyzer:
                 elif stmt_type == 'FOR':
                     self._handle_for_statement(coord)
 
+                elif stmt_type == 'NEXT':
+                    self._handle_next_statement(coord)
+
     def _parse_goto_target(self, goto_content: str) -> Tuple[int, int]:
         """Parse GOTO or GOSUB target and get statement index.
 
@@ -472,6 +475,19 @@ class StateMachineAnalyzer:
 
         # The FOR statement continues to next statement (same line, next index)
         self.jump_targets[for_coord] = [next_coord]
+
+    def _handle_next_statement(self, this_coord: Tuple[int, int]):
+        """Handle NEXT statement - mark statement following it as potential target.
+
+        Args:
+            this_coord: (line, index) of NEXT statement
+        """
+        # Mark statement after FOR as potential target for NEXT branches
+        next_coord = self._get_next_coordinates(this_coord)
+        self.coordinates_are_targets[next_coord] = True
+
+        # The FOR statement continues to next statement (same line, next index)
+        self.jump_targets[this_coord] = [next_coord]
 
     def get_state_mapping(self) -> Dict[str, dict]:
         """Generate unique state names for all coordinates.
