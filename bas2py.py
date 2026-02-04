@@ -737,6 +737,7 @@ class PythonCodeGenerator:
 			var_list = ', '.join(sorted(self.variables))
 			self.output_lines.append(f'	# Declare all BASIC variables as global for dynamic access')
 			self.output_lines.append(f'	global {var_list}')
+		self.output_lines.append('	global DATA_INDEX, PROGRAM_DATA')
 		self.output_lines.append('	# Initialize state and stacks')
 		self.output_lines.append('	state = "line_{}_index_0"'.format(
 			self.parser.get_line_numbers()[0] if self.parser.get_line_numbers() else 0
