@@ -181,7 +181,8 @@ class BASICParser:
         content = None
 
         # List of statement keywords in order of priority
-        keywords = ['REM', 'INPUT', 'PRINT', 'FOR', 'NEXT', 'GOTO', 'GOSUB', 'RETURN', 'IF', 'DATA', 'DIM', 'END']
+        keywords = ['REM', 'INPUT', 'PRINT', 'FOR', 'NEXT', 'GOTO', 'GOSUB',
+                    'RETURN', 'IF', 'DATA', 'DIM', 'END', 'READ']
 
         # Check each keyword
         for keyword in keywords:
