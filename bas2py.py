@@ -1256,16 +1256,8 @@ class PythonCodeGenerator:
 		var = match.group(1).strip()
 
 		# Get next line for fall-through (when loop completes)
-		line_num, idx = coord
-		line_numbers = self.parser.get_line_numbers()
-		next_state = None
-		try:
-			line_idx = line_numbers.index(line_num)
-			if line_idx + 1 < len(line_numbers):
-				next_line = line_numbers[line_idx + 1]
-				next_state = f'line_{next_line}_index_0'
-		except ValueError:
-			pass
+		next_line, next_index = self._get_next_coordinates(coord)
+		next_state = f'line_{next_line}_index_{next_index}'
 
 		# Build the NEXT logic with proper state transitions
 		# Use the variable name from stack if NEXT has no variable specified
