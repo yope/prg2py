@@ -686,7 +686,7 @@ class PythonCodeGenerator:
 					clean_content = re.sub(r'^LET\s*', '', content.strip())
 					if '=' in clean_content:
 						var = clean_content.split('=', 1)[0].strip()
-						py_var = self._convert_variable(var)
+						py_var = self._convert_variable(var, True)
 						self.variables.add(py_var)
 
 				elif stmt_type == 'INPUT':
@@ -701,7 +701,7 @@ class PythonCodeGenerator:
 						# Now split by comma to get variables
 						vars = [v.strip() for v in clean_input.split(',') if v.strip()]
 						for var in vars:
-							py_var = self._convert_variable(var)
+							py_var = self._convert_variable(var, True)
 							self.variables.add(py_var)
 
 				elif stmt_type == 'FOR':
@@ -709,7 +709,7 @@ class PythonCodeGenerator:
 					match = re.search(r'FOR\s*(\w+)\s*=', content)
 					if match:
 						var = match.group(1)
-						py_var = self._convert_variable(var)
+						py_var = self._convert_variable(var, True)
 						self.variables.add(py_var)
 
 				elif stmt_type == 'READ':
@@ -719,7 +719,7 @@ class PythonCodeGenerator:
 						var_list = match.group(1).strip()
 						vars = [v.strip() for v in var_list.split(',')]
 						for var in vars:
-							py_var = self._convert_variable(var)
+							py_var = self._convert_variable(var, True)
 							self.variables.add(py_var)
 
 	def _get_next_coordinates(self, current_coord: Tuple[int, int]) -> Optional[Tuple[int, int]]:
@@ -1331,14 +1331,12 @@ class PythonCodeGenerator:
 
 		return lines
 
-	def _convert_variable(self, var: str) -> str:
+	def _convert_variable(self, var: str, onlyname: bool = False) -> str:
 		"""Convert BASIC variable to Python identifier."""
-		if var.endswith('%'):
-			return var[:-1] + '_i'
-		elif var.endswith('$'):
-			return var[:-1] + '_s'
-		else:
-			return var
+		if onlyname and '(' in var:
+			var = var.split('(')[0]
+		var = var.replace('%', '_i').replace('$', '_s').replace('(','[').replace(')',']')
+		return var
 
 	def _convert_expression(self, expr: str) -> str:
 		"""Convert BASIC expression to Python."""
