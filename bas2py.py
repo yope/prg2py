@@ -1402,6 +1402,9 @@ class PythonCodeGenerator:
 
 		expr = re.sub(r'[A-Z][A-Z0-9]*[%$]?', replace_var, expr)
 
+		# Convert variable indexing
+		expr = expr.replace('(', '[').replace(')', ']')
+
 		# Convert operators
 		expr = expr.replace('=', '==')
 		expr = expr.replace('<>', '!=')
