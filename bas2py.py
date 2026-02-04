@@ -722,6 +722,29 @@ class PythonCodeGenerator:
 							py_var = self._convert_variable(var)
 							self.variables.add(py_var)
 
+	def _get_next_coordinates(self, current_coord: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+		"""Find the next statement coordinates after the current coordinate.
+
+		Args:
+			current_coord: (line_number, statement_index) of current position
+
+		Returns:
+			(next_line, next_index) of the statement that follows, or None if no more statements
+		"""
+		line_num, current_idx = current_coord
+		next_idx = current_idx + 1
+
+		# Check if coordinates exist in our parsed data
+		if (line_num, next_idx) in self.analyzer.index_mapping:
+			return (line_num, next_idx)
+
+		# Get the next line from line_numbers list
+		try:
+			next_line = self.analyzer.line_numbers[self.analyzer.line_numbers.index(line_num) + 1]
+		except IndexError:
+			return (line_num + 1, 0)
+		return (next_line, 0)
+
 	def _generate_main_function(self, pretty: bool = False):
 		"""Generate the main() function with state machine.
 
