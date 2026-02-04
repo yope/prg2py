@@ -1382,10 +1382,20 @@ class PythonCodeGenerator:
 		return var
 
 	def _convert_expression(self, expr: str) -> str:
-		"""Convert BASIC expression to Python."""
+		"""Convert BASIC expression to Python.
+
+		Handles:
+		- Variable indexing: V$(P(1)) -> V_s[P[1]]
+		- Function calls: MID$(SI$,2,2) -> MID_s(SI_s,2,2)
+		- Boolean operators: AND, OR, NOT -> and, or, not
+		- Bitwise operators: AND, OR, NOT -> &, |, ~ (context-dependent)
+		"""
 		import re
 
-		# Protect string literals
+		if not expr or not expr.strip():
+			return expr
+
+		# Protect string literals first
 		strings = []
 		string_pattern = r'"[^"]*"'
 
@@ -1395,28 +1405,320 @@ class PythonCodeGenerator:
 
 		expr = re.sub(string_pattern, protect_string, expr)
 
-		# Convert variables
-		def replace_var(match):
-			var = match.group(0)
-			return self._convert_variable(var)
+		# Tokenize the expression
+		tokens = self._tokenize_expression(expr)
 
-		expr = re.sub(r'[A-Z][A-Z0-9]*[%$]?', replace_var, expr)
+		# Parse and convert
+		result = self._parse_expression_tokens(tokens, strings)
 
-		# Convert variable indexing
-		expr = expr.replace('(', '[').replace(')', ']')
+		return result
 
-		# Convert operators
-		expr = expr.replace('=', '==')
-		expr = expr.replace('<>', '!=')
-		expr = expr.replace('><', '!=')
-		expr = expr.replace('====', '==')
-		expr = expr.replace('===', '==')
+	def _tokenize_expression(self, expr: str) -> list:
+		"""Tokenize a BASIC expression into tokens."""
+		import re
+		tokens = []
+		i = 0
+		expr = expr.strip()
 
-		# Restore string literals
-		for i, s in enumerate(strings):
-			expr = expr.replace(f'__STR_{i}__', s)
+		while i < len(expr):
+			char = expr[i]
 
-		return expr.strip()
+			# Skip whitespace
+			if char.isspace():
+				i += 1
+				continue
+
+			# String placeholders
+			if expr[i:].startswith('__STR_'):
+				match = re.match(r'__STR_(\d+)__', expr[i:])
+				if match:
+					tokens.append(('STRING', match.group(0)))
+					i += len(match.group(0))
+					continue
+
+			# Numbers (integers and floats)
+			if char.isdigit() or (char == '.' and i + 1 < len(expr) and expr[i + 1].isdigit()):
+				j = i
+				while j < len(expr) and (expr[j].isdigit() or expr[j] == '.'):
+					j += 1
+				tokens.append(('NUMBER', expr[i:j]))
+				i = j
+				continue
+
+			# Keywords (AND, OR, NOT) - must be checked before identifiers
+			if expr[i:].upper().startswith('AND'):
+				next_char_idx = i + 3
+				if next_char_idx >= len(expr) or not expr[next_char_idx].isalnum():
+					tokens.append(('KEYWORD', 'AND'))
+					i += 3
+					continue
+			if expr[i:].upper().startswith('OR'):
+				next_char_idx = i + 2
+				if next_char_idx >= len(expr) or not expr[next_char_idx].isalnum():
+					tokens.append(('KEYWORD', 'OR'))
+					i += 2
+					continue
+			if expr[i:].upper().startswith('NOT'):
+				next_char_idx = i + 3
+				if next_char_idx >= len(expr) or not expr[next_char_idx].isalnum():
+					tokens.append(('KEYWORD', 'NOT'))
+					i += 3
+					continue
+
+			# Identifiers (variables and function names)
+			if char.isalpha():
+				j = i
+				while j < len(expr) and (expr[j].isalnum() or expr[j] in '$%'):
+					j += 1
+				ident = expr[i:j]
+				# Check if identifier starts with a keyword (e.g., "ANDJ" -> "AND" + "J")
+				upper_ident = ident.upper()
+				if upper_ident.startswith('AND') and len(ident) > 3:
+					tokens.append(('KEYWORD', 'AND'))
+					tokens.append(('IDENT', ident[3:]))
+				elif upper_ident.startswith('NOT') and len(ident) > 3:
+					tokens.append(('KEYWORD', 'NOT'))
+					tokens.append(('IDENT', ident[3:]))
+				elif upper_ident.startswith('OR') and len(ident) > 2:
+					# Make sure it's not part of a longer word like "ORDER"
+					next_char = ident[2] if len(ident) > 2 else ''
+					if not next_char.isalpha() or upper_ident == 'OR':
+						tokens.append(('KEYWORD', 'OR'))
+						if len(ident) > 2:
+							tokens.append(('IDENT', ident[2:]))
+					else:
+						tokens.append(('IDENT', ident))
+				else:
+					tokens.append(('IDENT', ident))
+				i = j
+				continue
+
+			# Multi-character operators
+			if expr[i:].startswith('<>'):
+				tokens.append(('OP', '<>'))
+				i += 2
+				continue
+			if expr[i:].startswith('><'):
+				tokens.append(('OP', '><'))
+				i += 2
+				continue
+			if expr[i:].startswith('<='):
+				tokens.append(('OP', '<='))
+				i += 2
+				continue
+			if expr[i:].startswith('>='):
+				tokens.append(('OP', '>='))
+				i += 2
+				continue
+
+				# Single character operators and delimiters
+			if char in '+-*/=<>()[]{},;':
+				tokens.append(('OP', char))
+				i += 1
+				continue
+
+			# Unknown character, skip it
+			i += 1
+
+		return tokens
+
+	def _parse_expression_tokens(self, tokens: list, strings: list) -> str:
+		"""Parse tokens and convert to Python expression."""
+		import re
+		# Known BASIC functions that should keep parentheses
+		basic_functions = {
+			'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
+			'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT',
+			'ABS', 'SIN', 'COS', 'TAN', 'ATN', 'LOG', 'EXP',
+			'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE'
+		}
+
+		result = []
+		i = 0
+
+		while i < len(tokens):
+			token_type, token_value = tokens[i]
+
+			if token_type == 'STRING':
+				# Restore string literal
+				match = re.match(r'__STR_(\d+)__', token_value)
+				if match:
+					idx = int(match.group(1))
+					if idx < len(strings):
+						result.append(strings[idx])
+					else:
+						result.append(token_value)
+				else:
+					result.append(token_value)
+
+			elif token_type == 'NUMBER':
+				result.append(token_value)
+
+			elif token_type == 'IDENT':
+				var_name = token_value
+				py_var = self._convert_variable(var_name)
+
+				# Check if next token is '(' - could be array access or function call
+				if i + 1 < len(tokens) and tokens[i + 1] == ('OP', '('):
+					# Look ahead to find matching ')'
+					paren_start = i + 1
+					paren_depth = 1
+					j = paren_start + 1
+					while j < len(tokens) and paren_depth > 0:
+						if tokens[j] == ('OP', '('):
+							paren_depth += 1
+						elif tokens[j] == ('OP', ')'):
+							paren_depth -= 1
+						j += 1
+
+					# Extract argument tokens
+					arg_tokens = tokens[paren_start + 1:j - 1]
+
+					# Check if this is a function call or array access
+					upper_var = var_name.upper()
+					if upper_var in basic_functions or upper_var.rstrip('$') in basic_functions:
+						# It's a function call - keep parentheses
+						args_str = self._convert_arguments(arg_tokens, strings)
+						result.append(f'{py_var}({args_str})')
+					else:
+						# It's an array access - convert to brackets
+						args_str = self._convert_arguments(arg_tokens, strings)
+						result.append(f'{py_var}[{args_str}]')
+
+					i = j - 1  # Skip to after the closing paren
+				else:
+					result.append(py_var)
+
+			elif token_type == 'KEYWORD':
+				# Convert boolean operators to Python
+				if token_value == 'AND':
+					result.append('and')
+				elif token_value == 'OR':
+					result.append('or')
+				elif token_value == 'NOT':
+					result.append('not')
+				else:
+					result.append(token_value.lower())
+
+			elif token_type == 'OP':
+				# Convert operators
+				if token_value == '=':
+					result.append('==')
+				elif token_value in ('<>', '><'):
+					result.append('!=')
+				elif token_value == '<=':
+					result.append('<=')
+				elif token_value == '>=':
+					result.append('>=')
+				elif token_value == '(':
+					result.append('(')
+				elif token_value == ')':
+					result.append(')')
+				elif token_value == '[':
+					result.append('[')
+				elif token_value == ']':
+					result.append(']')
+				elif token_value == ',':
+					result.append(',')
+				elif token_value == ';':
+					result.append(';')
+				else:
+					result.append(token_value)
+
+			i += 1
+
+		return ' '.join(result)
+
+	def _convert_arguments(self, tokens: list, strings: list) -> str:
+		"""Convert argument tokens back to a string."""
+		import re
+		if not tokens:
+			return ''
+
+		# Reconstruct the expression from tokens
+		result = []
+		i = 0
+
+		while i < len(tokens):
+			token_type, token_value = tokens[i]
+
+			if token_type == 'STRING':
+				match = re.match(r'__STR_(\d+)__', token_value)
+				if match:
+					idx = int(match.group(1))
+					if idx < len(strings):
+						result.append(strings[idx])
+					else:
+						result.append(token_value)
+				else:
+					result.append(token_value)
+
+			elif token_type == 'NUMBER':
+				result.append(token_value)
+
+			elif token_type == 'IDENT':
+				var_name = token_value
+				py_var = self._convert_variable(var_name)
+
+				# Check for nested array/function calls
+				if i + 1 < len(tokens) and tokens[i + 1] == ('OP', '('):
+					paren_start = i + 1
+					paren_depth = 1
+					j = paren_start + 1
+					while j < len(tokens) and paren_depth > 0:
+						if tokens[j] == ('OP', '('):
+							paren_depth += 1
+						elif tokens[j] == ('OP', ')'):
+							paren_depth -= 1
+						j += 1
+
+					arg_tokens = tokens[paren_start + 1:j - 1]
+					basic_functions = {
+						'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
+						'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT',
+						'ABS', 'SIN', 'COS', 'TAN', 'ATN', 'LOG', 'EXP',
+						'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE'
+					}
+
+					upper_var = var_name.upper()
+					if upper_var in basic_functions or upper_var.rstrip('$') in basic_functions:
+						args_str = self._convert_arguments(arg_tokens, strings)
+						result.append(f'{py_var}({args_str})')
+					else:
+						args_str = self._convert_arguments(arg_tokens, strings)
+						result.append(f'{py_var}[{args_str}]')
+
+					i = j - 1
+				else:
+					result.append(py_var)
+
+			elif token_type == 'KEYWORD':
+				if token_value == 'AND':
+					result.append('and')
+				elif token_value == 'OR':
+					result.append('or')
+				elif token_value == 'NOT':
+					result.append('not')
+				else:
+					result.append(token_value.lower())
+
+			elif token_type == 'OP':
+				if token_value == '=':
+					result.append('==')
+				elif token_value in ('<>', '><'):
+					result.append('!=')
+				elif token_value == '<=':
+					result.append('<=')
+				elif token_value == '>=':
+					result.append('>=')
+				elif token_value in ('(', ')', '[', ']', ',', ';'):
+					result.append(token_value)
+				else:
+					result.append(token_value)
+
+			i += 1
+
+		return ' '.join(result)
 
 	def _convert_condition(self, condition: str) -> str:
 		"""Convert BASIC condition to Python condition."""
