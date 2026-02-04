@@ -462,17 +462,13 @@ class StateMachineAnalyzer:
             for_coord: (line, index) of FOR statement
             for_idx: The index of FOR in the statements list
         """
-        line_num, idx = for_coord
-        next_idx = for_idx + 1
 
         # Mark statement after FOR as potential target for NEXT branches
-        next_coord = (line_num, next_idx)
+        next_coord = self._get_next_coordinates(for_coord)
         self.coordinates_are_targets[next_coord] = True
 
         # The FOR statement continues to next statement (same line, next index)
-        current_coord = (line_num, idx)
-        next_in_line = (line_num, next_idx)
-        self.jump_targets[current_coord] = [next_in_line]
+        self.jump_targets[for_coord] = [next_coord]
 
     def get_state_mapping(self) -> Dict[str, dict]:
         """Generate unique state names for all coordinates.
