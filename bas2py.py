@@ -348,7 +348,7 @@ class StateMachineAnalyzer:
                     self._handle_if_statement(coord)
 
                 elif stmt_type == 'FOR':
-                    self._handle_for_statement(coord, idx)
+                    self._handle_for_statement(coord)
 
     def _parse_goto_target(self, goto_content: str) -> Tuple[int, int]:
         """Parse GOTO or GOSUB target and get statement index.
@@ -459,12 +459,11 @@ class StateMachineAnalyzer:
             # No next line - IF statement is last line, no false branch to execute
             pass
 
-    def _handle_for_statement(self, for_coord: Tuple[int, int], for_idx: int):
+    def _handle_for_statement(self, for_coord: Tuple[int, int]):
         """Handle FOR statement - mark statement following it as potential target.
 
         Args:
             for_coord: (line, index) of FOR statement
-            for_idx: The index of FOR in the statements list
         """
 
         # Mark statement after FOR as potential target for NEXT branches
