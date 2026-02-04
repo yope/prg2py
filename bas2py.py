@@ -356,7 +356,7 @@ class StateMachineAnalyzer:
             Tuple of (line_number, statement_index)
         """
         import re
-        match = re.search(r'(GOTO|GOSUB)\s+(\d+)', goto_content)
+        match = re.search(r'(GOTO|GOSUB)\s*(\d+)', goto_content)
         if match:
             target_line = int(match.group(2))
             return target_line, 0
@@ -606,7 +606,7 @@ class PythonCodeGenerator:
 		"""
 		import re
 		values = []
-		match = re.search(r'DATA\s+(.+)', data_content)
+		match = re.search(r'DATA\s*(.+)', data_content)
 		if match:
 			data_part = match.group(1)
 			# Split by comma, respecting quotes
@@ -1004,7 +1004,7 @@ class PythonCodeGenerator:
 	def _convert_input(self, content: str) -> List[str]:
 		"""Convert INPUT statement to Python input()."""
 		import re
-		match = re.search(r'INPUT\s+(.+)', content)
+		match = re.search(r'INPUT\s*(.+)', content)
 		if not match:
 			return ['# Invalid INPUT statement']
 
@@ -1027,7 +1027,7 @@ class PythonCodeGenerator:
 					jump_targets: Dict) -> List[str]:
 		"""Convert IF statement to Python if with state transition."""
 		import re
-		match = re.search(r'IF\s+(.+?)\s*THEN', content)
+		match = re.search(r'IF\s*(.+?)\s*THEN', content)
 		if not match:
 			return [f'# Invalid IF: {content}']
 
@@ -1053,7 +1053,7 @@ class PythonCodeGenerator:
 		if next_stmt and next_stmt['type'] == 'GOTO':
 			# IF THEN GOTO pattern
 			goto_content = next_stmt['content']
-			goto_match = re.search(r'GOTO\s+(\d+)', goto_content)
+			goto_match = re.search(r'GOTO\s*(\d+)', goto_content)
 			if goto_match:
 				target_line = int(goto_match.group(1))
 				target_state = f'line_{target_line}_index_0'
@@ -1105,7 +1105,7 @@ class PythonCodeGenerator:
 			List of Python code lines
 		"""
 		import re
-		match = re.search(r'GOTO\s+(\d+)', content)
+		match = re.search(r'GOTO\s*(\d+)', content)
 		if not match:
 			return [f'# Invalid GOTO: {content}']
 
@@ -1131,7 +1131,7 @@ class PythonCodeGenerator:
 					   jump_targets: Dict) -> List[str]:
 		"""Convert GOSUB statement with stack push."""
 		import re
-		match = re.search(r'GOSUB\s+(\d+)', content)
+		match = re.search(r'GOSUB\s*(\d+)', content)
 		if not match:
 			return [f'# Invalid GOSUB: {content}']
 
@@ -1158,7 +1158,7 @@ class PythonCodeGenerator:
 	def _convert_for(self, content: str, coord: Tuple[int, int]) -> List[str]:
 		"""Convert FOR statement to Python loop initialization."""
 		import re
-		match = re.search(r'FOR\s+(\w+)\s*=\s*(.+)\s+TO\s+(.+)', content)
+		match = re.search(r'FOR\s*(\w+)\s*=\s*(.+)\s*TO\s*(.+)', content)
 		if not match:
 			return [f'# Invalid FOR: {content}']
 
@@ -1168,7 +1168,7 @@ class PythonCodeGenerator:
 
 		step_val = 1
 		if 'STEP' in end:
-			step_match = re.search(r'(.+)\s+STEP\s+(.+)', end)
+			step_match = re.search(r'(.+)\s*STEP\s*(.+)', end)
 			if step_match:
 				end = step_match.group(1).strip()
 				step_val = step_match.group(2).strip()
@@ -1278,7 +1278,7 @@ class PythonCodeGenerator:
 	def _convert_read(self, content: str) -> List[str]:
 		"""Convert READ statement to list indexing."""
 		import re
-		match = re.search(r'READ\s+(.+)', content)
+		match = re.search(r'READ\s*(.+)', content)
 		if not match:
 			return [f'# Invalid READ: {content}']
 
