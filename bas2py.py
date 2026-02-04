@@ -549,6 +549,7 @@ class PythonCodeGenerator:
 		self.verbose = verbose
 		self.output_lines: List[str] = []
 		self.data_constants: List[str] = []
+		self.variables: set = set()  # Track all BASIC variables used
 
 	def generate(self, include_header: bool = True, pretty: bool = False) -> str:
 		"""Generate complete Python source code.
@@ -652,13 +653,75 @@ class PythonCodeGenerator:
 
 		return parts
 
+	def _collect_variables(self):
+		"""Collect all variables used in the program.
+
+		Iterate through all statements and collect variable names that need
+		to be declared as global in the main function.
+		"""
+		import re
+		for line_num, statements in self.parser.get_coordinates():
+			for idx, stmt_info in enumerate(statements):
+				stmt_type = stmt_info['type']
+				content = stmt_info['content']
+				coord = (line_num, idx)
+
+				if stmt_type == 'LET':
+					# Parse LET to get the variable name
+					clean_content = re.sub(r'^LET\s*', '', content.strip())
+					if '=' in clean_content:
+						var = clean_content.split('=', 1)[0].strip()
+						py_var = self._convert_variable(var)
+						self.variables.add(py_var)
+
+				elif stmt_type == 'INPUT':
+					# Parse INPUT to get variable names (handle prompt strings)
+					match = re.search(r'INPUT\s*(.+)', content)
+					if match:
+						input_part = match.group(1).strip()
+						# Remove any quoted prompt strings
+						# INPUT can have: "prompt" var or "prompt"; var or just var
+						# Remove quoted strings from the input part
+						clean_input = re.sub(r'"[^"]*"[;,]?\s*', '', input_part)
+						# Now split by comma to get variables
+						vars = [v.strip() for v in clean_input.split(',') if v.strip()]
+						for var in vars:
+							py_var = self._convert_variable(var)
+							self.variables.add(py_var)
+
+				elif stmt_type == 'FOR':
+					# Parse FOR to get loop variable
+					match = re.search(r'FOR\s*(\w+)\s*=', content)
+					if match:
+						var = match.group(1)
+						py_var = self._convert_variable(var)
+						self.variables.add(py_var)
+
+				elif stmt_type == 'READ':
+					# Parse READ to get variable names
+					match = re.search(r'READ\s*(.+)', content)
+					if match:
+						var_list = match.group(1).strip()
+						vars = [v.strip() for v in var_list.split(',')]
+						for var in vars:
+							py_var = self._convert_variable(var)
+							self.variables.add(py_var)
+
 	def _generate_main_function(self, pretty: bool = False):
 		"""Generate the main() function with state machine.
 
 		Args:
 			pretty: Whether to add extra formatting for readability
 		"""
+		# First, collect all variables used in the program
+		self._collect_variables()
+
 		self.output_lines.append('def main():')
+		# Generate global declaration for all collected variables
+		if self.variables:
+			var_list = ', '.join(sorted(self.variables))
+			self.output_lines.append(f'	# Declare all BASIC variables as global for dynamic access')
+			self.output_lines.append(f'	global {var_list}')
 		self.output_lines.append('	# Initialize state and stacks')
 		self.output_lines.append('	state = "line_{}_index_0"'.format(
 			self.parser.get_line_numbers()[0] if self.parser.get_line_numbers() else 0
@@ -932,6 +995,8 @@ class PythonCodeGenerator:
 			value = parts[1].strip()
 			py_var = self._convert_variable(var)
 			py_value = self._convert_expression(value)
+			# Track the variable being assigned
+			self.variables.add(py_var)
 			return [f'{py_var} = {py_value}']
 
 		return [f'# Invalid LET: {content}']
@@ -949,6 +1014,8 @@ class PythonCodeGenerator:
 		lines = []
 		for var in vars:
 			py_var = self._convert_variable(var)
+			# Track the input variable
+			self.variables.add(py_var)
 			if var.endswith('$'):
 				lines.append(f'{py_var} = input()')
 			else:
@@ -1130,11 +1197,14 @@ class PythonCodeGenerator:
 
 		loop_body_state = f'line_{loop_body_line}_index_{loop_body_idx}'
 
-		# Store: (loop_var_name, end_value, step_value, loop_body_state)
+		# Track the loop variable
+		self.variables.add(py_var)
+
+		# Store loop info with current value tracking
 		# We'll use a dictionary to track loop variables instead of locals()
 		return [
 			f'{py_var} = {py_start}',
-			f'for_stack.append({{"var": "{py_var}", "end": {py_end}, "step": {py_step}, "body": "{loop_body_state}"}})'
+			f'for_stack.append({{"var": "{py_var}", "current": {py_start}, "end": {py_end}, "step": {py_step}, "body": "{loop_body_state}"}})'
 		]
 
 	def _convert_next(self, content: str, coord: Tuple[int, int]) -> List[str]:
@@ -1159,19 +1229,25 @@ class PythonCodeGenerator:
 			pass
 
 		# Build the NEXT logic with proper state transitions
+		# Use the variable name from stack if NEXT has no variable specified
+		# Build the NEXT logic using the stored current value in for_stack
+		# This works for both cases: NEXT with or without variable name
 		lines = [
 			'if not for_stack:',
 			'	raise Exception("NEXT without FOR")',
-			'# Get loop info from dict: {var, end, step, body}',
+			'# Get loop info from dict: {var, current, end, step, body}',
 			'loop_info = for_stack[-1]',
 			'loop_var = loop_info["var"]',
+			'loop_current = loop_info["current"]',
 			'loop_end = loop_info["end"]',
 			'loop_step = loop_info["step"]',
 			'loop_body = loop_info["body"]',
-			'# Increment loop variable',
-			f'{var} = {var} + loop_step if loop_var == "{var}" else {var}',
+			'# Increment loop current value',
+			'new_value = loop_current + loop_step',
+			'# Update the actual loop variable using globals()',
+			'globals()[loop_var] = new_value',
 			'# Check if loop should continue',
-			f'if (loop_step >= 0 and {var} > loop_end) or (loop_step < 0 and {var} < loop_end):',
+			'if (loop_step >= 0 and new_value > loop_end) or (loop_step < 0 and new_value < loop_end):',
 			'	# Loop complete - remove from stack and continue to next line',
 			'	for_stack.pop()',
 		]
@@ -1188,10 +1264,11 @@ class PythonCodeGenerator:
 			lines.append(f'	else:')
 			lines.append(f'		break  # End of program')
 
+		# Add the else clause for loop continuation
 		lines.extend([
 			'else:',
-			'	# Loop continues - update info in stack and jump back',
-			'	for_stack[-1]["current"] = ' + var,
+			'	# Loop continues - update stored current value and jump back',
+			'	for_stack[-1]["current"] = new_value',
 			'	state = loop_body',
 			'	continue',
 		])
@@ -1215,6 +1292,8 @@ class PythonCodeGenerator:
 
 		for i, var in enumerate(vars):
 			py_var = self._convert_variable(var)
+			# Track the variable being read
+			self.variables.add(py_var)
 			lines.append(f'{py_var} = PROGRAM_DATA[DATA_INDEX + {i}]')
 
 		lines.append(f'DATA_INDEX += {len(vars)}')
