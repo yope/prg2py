@@ -32,6 +32,7 @@ def main():
 			M_s = MID_s(SI_s , 2 , 2)
 			print(M_s + " IS INSIDE")
 			print(" IS INSIDE" + M_s)
+			print(TAB(16) + "BLA")
 			J = float(input())
 			if not (I == 10 and J == 20):
 				state = "line_70_index_0"

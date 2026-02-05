@@ -1480,9 +1480,14 @@ class PythonCodeGenerator:
 
 		In BASIC, strings can be concatenated by placing them adjacent:
 		PRINT A$"B"  ->  print(A$ + "B")
+		PRINT TAB(16)"X"  ->  print(TAB(16) + "X")
 		"""
 		if len(tokens) < 2:
 			return tokens
+
+		# Functions that return strings
+		string_functions = {'TAB', 'SPC', 'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
+							'CHR', 'CHR$', 'STR', 'STR$'}
 
 		result = [tokens[0]]
 
@@ -1498,6 +1503,22 @@ class PythonCodeGenerator:
 				is_prev_string = True
 			elif prev_type == 'STRING':
 				is_prev_string = True
+			elif prev_type == 'OP' and prev_val == ')':
+				# Check if this closing paren completes a string function call
+				# Walk backwards to find the matching opening paren and function name
+				paren_depth = 1
+				j = i - 2
+				while j >= 0 and paren_depth > 0:
+					if tokens[j] == ('OP', ')'):
+						paren_depth += 1
+					elif tokens[j] == ('OP', '('):
+						paren_depth -= 1
+					j -= 1
+				# Now j points to token before opening paren, should be function name
+				if j >= 0 and tokens[j][0] == 'IDENT':
+					func_name = tokens[j][1].upper()
+					if func_name in string_functions:
+						is_prev_string = True
 
 			# Check if current token is a string
 			is_curr_string = False
@@ -1640,7 +1661,7 @@ class PythonCodeGenerator:
 			'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
 			'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT',
 			'ABS', 'SIN', 'COS', 'TAN', 'ATN', 'LOG', 'EXP',
-			'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE'
+			'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE', 'TAB'
 		}
 
 		result = []
