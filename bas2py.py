@@ -981,11 +981,7 @@ class PythonCodeGenerator:
 		if not args:
 			return ['print()']
 
-		semicolon_end = args.endswith(';')
-		if semicolon_end:
-			args = args[:-1].strip()
-
-		parts = self._parse_print_args(args)
+		parts, semicolon_end = self._parse_print_args(args)
 
 		if not parts:
 			return ['print()' if not semicolon_end else 'print(end="")']
@@ -996,94 +992,97 @@ class PythonCodeGenerator:
 		else:
 			return [f'print({joined})']
 
-	def _parse_print_args(self, args: str) -> List[str]:
-		"""Parse PRINT arguments.
+	def _parse_print_args(self, args: str) -> Tuple[List[str], bool]:
+		"""Parse PRINT arguments and return parts and whether it ends with semicolon.
 
-		Handles BASIC implicit string concatenation where strings can be
-		adjacent without an operator (e.g., PRINT A$"B" becomes print(A$ + "B")).
+		In BASIC:
+		- Comma (,) separates items with a TAB
+		- Semicolon (;) concatenates items with no space
+		- Semicolon at end suppresses newline
+
+		Returns:
+			Tuple of (list of print arguments, has_trailing_semicolon)
 		"""
+		if not args.strip():
+			return [], False
+
 		parts = []
-		current = ""
+		current_item = ""
 		in_quote = False
+		has_trailing_semicolon = False
 
 		i = 0
 		while i < len(args):
 			char = args[i]
 			if char == '"':
 				in_quote = not in_quote
-				current += char
+				current_item += char
 			elif char == ',' and not in_quote:
-				if current.strip():
-					parts.append(self._convert_expression(current.strip()))
+				# Comma separates items with TAB - finish current concatenation group
+				if current_item.strip():
+					parts.append(self._convert_expression(current_item.strip()))
 				parts.append('"\\t"')
-				current = ""
+				current_item = ""
+				has_trailing_semicolon = False
 			elif char == ';' and not in_quote:
-				if current.strip():
-					parts.append(self._convert_expression(current.strip()))
-				current = ""
+				# Semicolon means concatenate with next item (no space)
+				if current_item.strip():
+					parts.append(self._convert_expression(current_item.strip()))
+				# Mark that we need to concatenate with the next item
+				has_trailing_semicolon = True
+				current_item = ""
 			else:
-				current += char
+				current_item += char
+				if not char.isspace():
+					has_trailing_semicolon = False
 			i += 1
 
-		if current.strip():
-			parts.append(self._convert_expression(current.strip()))
+		# Handle remaining item
+		if current_item.strip():
+			parts.append(self._convert_expression(current_item.strip()))
+		elif has_trailing_semicolon and not parts:
+			# Edge case: only a semicolon
+			has_trailing_semicolon = True
 
-		# Handle implicit string concatenation in BASIC
-		# When a string variable or literal is followed immediately by another string
-		# e.g., M$" IS INSIDE" should become M$ + " IS INSIDE"
-		parts = self._handle_implicit_concat(parts)
+		# Concatenate semicolon-separated items
+		parts = self._concat_semicolon_items(parts)
 
-		return parts
+		return parts, has_trailing_semicolon
 
-	def _handle_implicit_concat(self, parts: List[str]) -> List[str]:
-		"""Handle BASIC implicit string concatenation.
+	def _concat_semicolon_items(self, parts: List[str]) -> List[str]:
+		"""Concatenate items that were semicolon-separated with '+' operator.
 
-		In BASIC, strings can be concatenated by placing them adjacent to each other
-		without an operator. This method inserts '+' operators where needed.
+		In BASIC PRINT A;B;C, items are concatenated without spaces.
+		In Python, we achieve this by joining with '+' operator.
 		"""
 		if len(parts) < 2:
 			return parts
 
-		result = [parts[0]]
+		result = []
+		concat_group = []
 
-		for i in range(1, len(parts)):
-			prev_part = parts[i - 1]
-			curr_part = parts[i]
+		for i, part in enumerate(parts):
+			if part == '"\\t"':
+				# Tab separator - finish any concatenation group first
+				if concat_group:
+					result.append(self._join_concat_group(concat_group))
+					concat_group = []
+				result.append(part)
+			else:
+				# Regular item - add to concatenation group
+				concat_group.append(part)
 
-			# Check if we need to insert a '+' for concatenation
-			# This happens when:
-			# 1. Previous part is a string literal (ends with ")
-			# 2. Previous part is a string variable (ends with _s)
-			# 3. Current part is a string literal (starts with ")
-			# 4. Current part is a string variable (contains _s)
-			needs_concat = False
-
-			# Check if previous part is a string
-			is_prev_string = (
-				prev_part.endswith('"') or  # string literal
-				prev_part.endswith('_s') or  # string variable
-				prev_part.endswith('" , end="")') or  # semicolon continuation with string
-				('"' in prev_part and '_s' in prev_part)  # complex string expression
-			)
-
-			# Check if current part is a string
-			is_curr_string = (
-				curr_part.startswith('"') or  # string literal
-				curr_part.endswith('_s') or  # string variable
-				('_s' in curr_part and '+' not in curr_part)  # likely string expression
-			)
-
-			# Special case: tab separator should not have concat
-			if curr_part == '"\\t"':
-				is_curr_string = False
-
-			if is_prev_string and is_curr_string:
-				# Insert concatenation operator
-				result.append('+')
-
-			result.append(curr_part)
+		# Don't forget the last group
+		if concat_group:
+			result.append(self._join_concat_group(concat_group))
 
 		return result
+
+	def _join_concat_group(self, items: List[str]) -> str:
+		"""Join a group of items with '+' for concatenation."""
+		if len(items) == 1:
+			return items[0]
+		return ' + '.join(items)
 
 	def _convert_let(self, content: str) -> List[str]:
 		"""Convert LET statement to Python assignment."""

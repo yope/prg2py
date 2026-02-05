@@ -25,13 +25,13 @@ def main():
 			print("YES")
 			state = "line_35_index_0"
 			continue
-
 		elif state == "line_35_index_0":
 			SI_s = "STRING"
 			I = 10
 			C = 1007
 			M_s = MID_s(SI_s , 2 , 2)
 			print(M_s + " IS INSIDE")
+			print(" IS INSIDE" + M_s)
 			J = float(input())
 			if not (I == 10 and J == 20):
 				state = "line_70_index_0"
@@ -39,7 +39,6 @@ def main():
 			print("CORRECT")
 			state = "line_70_index_0"
 			continue
-
 		elif state == "line_70_index_0":
 			if not (C == 1007 or C == 1008):
 				state = "line_90_index_0"
@@ -47,10 +46,8 @@ def main():
 			TD = 3
 			state = "line_90_index_0"
 			continue
-
 		elif state == "line_90_index_0":
 			break  # END statement
-
 		else:
 			raise Exception(f"Unknown state: {state}")
 
