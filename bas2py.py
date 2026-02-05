@@ -997,7 +997,11 @@ class PythonCodeGenerator:
 			return [f'print({joined})']
 
 	def _parse_print_args(self, args: str) -> List[str]:
-		"""Parse PRINT arguments."""
+		"""Parse PRINT arguments.
+
+		Handles BASIC implicit string concatenation where strings can be
+		adjacent without an operator (e.g., PRINT A$"B" becomes print(A$ + "B")).
+		"""
 		parts = []
 		current = ""
 		in_quote = False
@@ -1024,7 +1028,62 @@ class PythonCodeGenerator:
 		if current.strip():
 			parts.append(self._convert_expression(current.strip()))
 
+		# Handle implicit string concatenation in BASIC
+		# When a string variable or literal is followed immediately by another string
+		# e.g., M$" IS INSIDE" should become M$ + " IS INSIDE"
+		parts = self._handle_implicit_concat(parts)
+
 		return parts
+
+	def _handle_implicit_concat(self, parts: List[str]) -> List[str]:
+		"""Handle BASIC implicit string concatenation.
+
+		In BASIC, strings can be concatenated by placing them adjacent to each other
+		without an operator. This method inserts '+' operators where needed.
+		"""
+		if len(parts) < 2:
+			return parts
+
+		result = [parts[0]]
+
+		for i in range(1, len(parts)):
+			prev_part = parts[i - 1]
+			curr_part = parts[i]
+
+			# Check if we need to insert a '+' for concatenation
+			# This happens when:
+			# 1. Previous part is a string literal (ends with ")
+			# 2. Previous part is a string variable (ends with _s)
+			# 3. Current part is a string literal (starts with ")
+			# 4. Current part is a string variable (contains _s)
+			needs_concat = False
+
+			# Check if previous part is a string
+			is_prev_string = (
+				prev_part.endswith('"') or  # string literal
+				prev_part.endswith('_s') or  # string variable
+				prev_part.endswith('" , end="")') or  # semicolon continuation with string
+				('"' in prev_part and '_s' in prev_part)  # complex string expression
+			)
+
+			# Check if current part is a string
+			is_curr_string = (
+				curr_part.startswith('"') or  # string literal
+				curr_part.endswith('_s') or  # string variable
+				('_s' in curr_part and '+' not in curr_part)  # likely string expression
+			)
+
+			# Special case: tab separator should not have concat
+			if curr_part == '"\\t"':
+				is_curr_string = False
+
+			if is_prev_string and is_curr_string:
+				# Insert concatenation operator
+				result.append('+')
+
+			result.append(curr_part)
+
+		return result
 
 	def _convert_let(self, content: str) -> List[str]:
 		"""Convert LET statement to Python assignment."""
@@ -1389,6 +1448,7 @@ class PythonCodeGenerator:
 		- Function calls: MID$(SI$,2,2) -> MID_s(SI_s,2,2)
 		- Boolean operators: AND, OR, NOT -> and, or, not
 		- Bitwise operators: AND, OR, NOT -> &, |, ~ (context-dependent)
+		- Implicit string concatenation: A$"B" -> A$ + "B"
 		"""
 		import re
 
@@ -1408,8 +1468,50 @@ class PythonCodeGenerator:
 		# Tokenize the expression
 		tokens = self._tokenize_expression(expr)
 
+		# Handle implicit string concatenation by inserting '+' operators
+		tokens = self._insert_concat_operators(tokens)
+
 		# Parse and convert
 		result = self._parse_expression_tokens(tokens, strings)
+
+		return result
+
+	def _insert_concat_operators(self, tokens: list) -> list:
+		"""Insert '+' operators for implicit string concatenation.
+
+		In BASIC, strings can be concatenated by placing them adjacent:
+		PRINT A$"B"  ->  print(A$ + "B")
+		"""
+		if len(tokens) < 2:
+			return tokens
+
+		result = [tokens[0]]
+
+		for i in range(1, len(tokens)):
+			prev_token = tokens[i - 1]
+			curr_token = tokens[i]
+			prev_type, prev_val = prev_token
+			curr_type, curr_val = curr_token
+
+			# Check if previous token is a string (identifier ending with $ or string literal)
+			is_prev_string = False
+			if prev_type == 'IDENT' and prev_val.endswith('$'):
+				is_prev_string = True
+			elif prev_type == 'STRING':
+				is_prev_string = True
+
+			# Check if current token is a string
+			is_curr_string = False
+			if curr_type == 'IDENT' and curr_val.endswith('$'):
+				is_curr_string = True
+			elif curr_type == 'STRING':
+				is_curr_string = True
+
+			# Insert '+' if we have adjacent strings
+			if is_prev_string and is_curr_string:
+				result.append(('OP', '+'))
+
+			result.append(curr_token)
 
 		return result
 
@@ -1479,12 +1581,21 @@ class PythonCodeGenerator:
 				elif upper_ident.startswith('NOT') and len(ident) > 3:
 					tokens.append(('KEYWORD', 'NOT'))
 					tokens.append(('IDENT', ident[3:]))
-				elif upper_ident.startswith('OR') and len(ident) > 2:
-					# Make sure it's not part of a longer word like "ORDER"
-					next_char = ident[2] if len(ident) > 2 else ''
-					if not next_char.isalpha() or upper_ident == 'OR':
+				elif upper_ident.startswith('OR') and len(ident) >= 2:
+					# Check if it's exactly "OR" or followed by non-alpha (like OR=, OR<, etc.)
+					# or followed by another identifier (like ORC -> OR + C)
+					if upper_ident == 'OR':
+						# Exactly OR
 						tokens.append(('KEYWORD', 'OR'))
-						if len(ident) > 2:
+					elif len(ident) > 2:
+						next_char = ident[2]
+						if not next_char.isalpha():
+							# OR followed by operator or number (e.g., OR=, OR1)
+							tokens.append(('KEYWORD', 'OR'))
+							tokens.append(('IDENT', ident[2:]))
+						else:
+							# OR followed by identifier (e.g., ORC -> OR + C)
+							tokens.append(('KEYWORD', 'OR'))
 							tokens.append(('IDENT', ident[2:]))
 					else:
 						tokens.append(('IDENT', ident))
