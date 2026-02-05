@@ -1526,6 +1526,10 @@ class PythonCodeGenerator:
 				is_curr_string = True
 			elif curr_type == 'STRING':
 				is_curr_string = True
+			elif curr_type == 'IDENT' and curr_val.upper() in string_functions:
+				# Current token is a string function name - check if followed by '('
+				if i + 1 < len(tokens) and tokens[i + 1] == ('OP', '('):
+					is_curr_string = True
 
 			# Insert '+' if we have adjacent strings
 			if is_prev_string and is_curr_string:
