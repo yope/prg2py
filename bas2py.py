@@ -774,9 +774,18 @@ class PythonCodeGenerator:
 		self.output_lines.append('def main():')
 		# Generate global declaration for all collected variables
 		if self.variables:
-			var_list = ', '.join(sorted(self.variables))
+			variables = list(self.variables)
 			self.output_lines.append(f'	# Declare all BASIC variables as global for dynamic access')
-			self.output_lines.append(f'	global {var_list}')
+			for i in range(0, len(variables), 20):
+				var_chunk = variables[i:i+20]
+				var_list = ', '.join(var_chunk)
+				self.output_lines.append(f'	global {var_list}')
+				for var in var_chunk:
+					if var.endswith('_s'):
+						self.output_lines.append(f'	{var} = ""')
+					elif not var.endswith('_l'):
+						self.output_lines.append(f'	{var} = 0')
+
 		self.output_lines.append('	global DATA_INDEX, PROGRAM_DATA')
 		self.output_lines.append('	# Initialize state and stacks')
 		self.output_lines.append('	state = "line_{}_index_0"'.format(
