@@ -1394,8 +1394,7 @@ class PythonCodeGenerator:
 			return [f'# Invalid GOSUB: {content}']
 
 		target_line = int(match.group(1))
-		line_num, idx = coord
-		return_coord = (line_num, idx + 1)
+		return_coord = self._get_next_coordinates(coord)
 		return_state = f'line_{return_coord[0]}_index_{return_coord[1]}'
 
 		return [
