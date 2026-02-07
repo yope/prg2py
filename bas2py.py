@@ -981,6 +981,9 @@ class PythonCodeGenerator:
 		elif stmt_type == 'DIM':
 			return self._convert_dim(content)
 
+		elif stmt_type == 'PASS':
+			return ['pass']
+
 		elif stmt_type == 'END':
 			return ['break  # END statement']
 
