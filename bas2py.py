@@ -1585,6 +1585,7 @@ class PythonCodeGenerator:
 				dim = []
 			elif c == ',' and parens:
 				dim.append(int(dnums))
+				dnums = ''
 			elif c != ' ' and not parens:
 				var += c
 			elif parens:
