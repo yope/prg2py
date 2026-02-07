@@ -1574,6 +1574,7 @@ class PythonCodeGenerator:
 		dim = []
 		for c in content:
 			if c == '(':
+				var += '_l'
 				dnums = ''
 				parens = True
 			elif c == ')':
@@ -1616,7 +1617,7 @@ class PythonCodeGenerator:
 		for c in var:
 			if c == '(':
 				braket = True
-				c = '['
+				c = '_l['
 			elif c == ')':
 				braket = False
 				c = ']'
@@ -1900,7 +1901,7 @@ class PythonCodeGenerator:
 					else:
 						# It's an array access - convert to brackets
 						args_str = self._convert_arguments(arg_tokens, strings)
-						result.append(f'{py_var}[{args_str}]')
+						result.append(f'{py_var}_l[{args_str.replace(",","][")}]')
 
 					i = j - 1  # Skip to after the closing paren
 				else:
