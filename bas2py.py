@@ -717,7 +717,21 @@ class PythonCodeGenerator:
 					match = re.search(r'READ\s*(.+)', content)
 					if match:
 						var_list = match.group(1).strip()
-						vars = [v.strip() for v in var_list.split(',')]
+						#vars = [v.strip() for v in var_list.split(',')]
+						vars = []
+						curr = ""
+						pasens = False
+						for c in var_list:
+							if c == '(':
+								parens = True
+							elif c == ')':
+								parens = False
+							if c == ',' and not parens:
+								vars.append(curr)
+								curr = ""
+							else:
+								curr += c
+						vars.append(curr)
 						for var in vars:
 							py_var = self._convert_variable(var, True)
 							self.variables.add(py_var)
@@ -1513,7 +1527,22 @@ class PythonCodeGenerator:
 			return [f'# Invalid READ: {content}']
 
 		var_list = match.group(1).strip()
-		vars = [v.strip() for v in var_list.split(',')]
+		#vars = [v.strip() for v in var_list.split(',')]
+
+		vars = []
+		curr = ""
+		pasens = False
+		for c in var_list:
+			if c == '(':
+				parens = True
+			elif c == ')':
+				parens = False
+			if c == ',' and not parens:
+				vars.append(curr)
+				curr = ""
+			else:
+				curr += c
+		vars.append(curr)
 
 		lines = [
 			'if DATA_INDEX >= len(PROGRAM_DATA):',
@@ -1574,8 +1603,21 @@ class PythonCodeGenerator:
 		"""Convert BASIC variable to Python identifier."""
 		if onlyname and '(' in var:
 			var = var.split('(')[0]
-		var = var.replace('%', '_i').replace('$', '_s').replace('(','[').replace(')',']')
-		return var
+		#var = var.replace('%', '_i').replace('$', '_s').replace('(','[').replace(')',']')
+		var = var.replace('%', '_i').replace('$', '_s')
+		varout = ""
+		braket = False
+		for c in var:
+			if c == '(':
+				braket = True
+				c = '['
+			elif c == ')':
+				braket = False
+				c = ']'
+			if c == ',' and braket:
+				c = ']['
+			varout += c
+		return varout
 
 	def _convert_expression(self, expr: str) -> str:
 		"""Convert BASIC expression to Python.
