@@ -30,10 +30,10 @@ def main():
 			I = 10
 			C = 1007
 			M_s = MID_s(SI_s , 2 , 2)
-			print(M_s " IS INSIDE")
+			print(M_s + " IS INSIDE")
 			print(" IS INSIDE" + M_s)
 			print("BLO" + TAB(16) + "BLA")
-			print("DON'T KNOW HOW TO " V_s[2] " !")
+			print("DON'T KNOW HOW TO ", V_s[2], " !")
 			J = float(input())
 			if not (I == 10 and J == 20):
 				state = "line_70_index_0"

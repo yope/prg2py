@@ -1064,10 +1064,11 @@ class PythonCodeGenerator:
 		- PRINT "A" "B" -> print("A" + "B")
 		- PRINT "A" ; "B" -> print("A" + "B")
 		- PRINT "A" , "B" -> print("A", "\t", "B")
+		- PRINT M$"B" -> print(M_s + "B")  (no space between items)
 
 		This method joins adjacent string items with '+' operator.
 		"""
-		if len(parts) < 2:
+		if len(parts) < 1:
 			return parts
 
 		# String-returning functions in BASIC
@@ -1085,6 +1086,17 @@ class PythonCodeGenerator:
 				if part.startswith(func + '('):
 					return True
 			return False
+
+		# First, handle items that contain multiple string expressions
+		# e.g., M_s " IS INSIDE" should become [M_s, " IS INSIDE"]
+		expanded_parts = []
+		for part in parts:
+			expanded = self._expand_implicit_concat_in_item(part)
+			expanded_parts.extend(expanded)
+		parts = expanded_parts
+
+		if len(parts) < 2:
+			return parts
 
 		result = []
 		concat_group = []
@@ -1111,6 +1123,98 @@ class PythonCodeGenerator:
 			result.append(self._join_concat_group(concat_group))
 
 		return result
+
+	def _expand_implicit_concat_in_item(self, item: str) -> List[str]:
+		"""Expand an item that may contain implicit string concatenation.
+
+		In BASIC PRINT statements, items can be adjacent without spaces:
+		- M$" IS INSIDE" contains M$ and " IS INSIDE"
+		- "BLO"TAB(16) contains "BLO" and TAB(16)
+
+		This method splits such items into separate parts.
+		"""
+		import re
+
+		if not item or not item.strip():
+			return [item]
+
+		# String-returning functions in BASIC
+		string_functions = {'TAB', 'SPC', 'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
+							'CHR', 'CHR$', 'STR', 'STR$'}
+
+		parts = []
+		current = ""
+		in_quote = False
+		i = 0
+
+		while i < len(item):
+			char = item[i]
+
+			if char == '"':
+				# String literal boundary
+				if in_quote:
+					# End of string literal
+					current += char
+					if current.strip():
+						parts.append(current)
+					current = ""
+					in_quote = False
+				else:
+					# Start of string literal - check if we had something before
+					if current.strip():
+						parts.append(current)
+						current = ""
+					current += char
+					in_quote = True
+			elif in_quote:
+				current += char
+			elif char.isalpha():
+				# Start of identifier or function name
+				j = i
+				while j < len(item) and (item[j].isalnum() or item[j] in '$%'):
+					j += 1
+				ident = item[i:j]
+
+				# Check if this is a string function
+				upper_ident = ident.upper()
+				if upper_ident in string_functions or upper_ident.rstrip('$') in string_functions:
+					# Check if followed by '('
+					if j < len(item) and item[j] == '(':
+						# Find matching ')'
+						paren_depth = 1
+						k = j + 1
+						while k < len(item) and paren_depth > 0:
+							if item[k] == '(':
+								paren_depth += 1
+							elif item[k] == ')':
+								paren_depth -= 1
+							k += 1
+						# Extract full function call
+						func_call = item[i:k]
+						if current.strip():
+							parts.append(current)
+							current = ""
+						parts.append(func_call)
+						i = k
+						continue
+
+				# Regular identifier (variable)
+				current += ident
+				i = j
+				continue
+			else:
+				current += char
+
+			i += 1
+
+		# Handle remaining
+		if current.strip():
+			parts.append(current)
+
+		# Filter out empty parts and whitespace-only
+		parts = [p.strip() for p in parts if p.strip()]
+
+		return parts if parts else [item]
 
 	def _join_concat_group(self, items: List[str]) -> str:
 		"""Join a group of items with '+' for concatenation."""
