@@ -998,6 +998,7 @@ class PythonCodeGenerator:
 		In BASIC:
 		- Comma (,) separates items with a TAB
 		- Semicolon (;) concatenates items with no space
+		- Space or implicit concatenation: items adjacent without separator
 		- Semicolon at end suppresses newline
 
 		Returns:
@@ -1031,6 +1032,13 @@ class PythonCodeGenerator:
 				# Mark that we need to concatenate with the next item
 				has_trailing_semicolon = True
 				current_item = ""
+			elif char.isspace() and not in_quote:
+				# Space outside quotes separates items for concatenation
+				if current_item.strip():
+					parts.append(self._convert_expression(current_item.strip()))
+					current_item = ""
+				# Reset semicolon flag since we're starting a new item
+				has_trailing_semicolon = False
 			else:
 				current_item += char
 				if not char.isspace():
@@ -1044,33 +1052,59 @@ class PythonCodeGenerator:
 			# Edge case: only a semicolon
 			has_trailing_semicolon = True
 
-		# Concatenate semicolon-separated items
-		parts = self._concat_semicolon_items(parts)
+		# Concatenate adjacent string items
+		parts = self._concat_print_items(parts)
 
 		return parts, has_trailing_semicolon
 
-	def _concat_semicolon_items(self, parts: List[str]) -> List[str]:
-		"""Concatenate items that were semicolon-separated with '+' operator.
+	def _concat_print_items(self, parts: List[str]) -> List[str]:
+		"""Concatenate PRINT items that should be joined with '+' operator.
 
-		In BASIC PRINT A;B;C, items are concatenated without spaces.
-		In Python, we achieve this by joining with '+' operator.
+		In BASIC PRINT statements, items can be implicitly concatenated:
+		- PRINT "A" "B" -> print("A" + "B")
+		- PRINT "A" ; "B" -> print("A" + "B")
+		- PRINT "A" , "B" -> print("A", "\t", "B")
+
+		This method joins adjacent string items with '+' operator.
 		"""
 		if len(parts) < 2:
 			return parts
 
+		# String-returning functions in BASIC
+		string_functions = {'TAB', 'SPC', 'MID$', 'LEFT$', 'RIGHT$', 'CHR$', 'STR$'}
+
+		def is_string_item(part: str) -> bool:
+			"""Check if a part is a string (literal, variable, or function)."""
+			part = part.strip()
+			if part.startswith('"') and part.endswith('"'):
+				return True
+			if part.endswith('_s'):
+				return True
+			# Check for function calls
+			for func in string_functions:
+				if part.startswith(func + '('):
+					return True
+			return False
+
 		result = []
 		concat_group = []
 
-		for i, part in enumerate(parts):
+		for part in parts:
 			if part == '"\\t"':
 				# Tab separator - finish any concatenation group first
 				if concat_group:
 					result.append(self._join_concat_group(concat_group))
 					concat_group = []
 				result.append(part)
-			else:
-				# Regular item - add to concatenation group
+			elif is_string_item(part):
+				# String item - add to concatenation group
 				concat_group.append(part)
+			else:
+				# Non-string item - finish concatenation group first
+				if concat_group:
+					result.append(self._join_concat_group(concat_group))
+					concat_group = []
+				result.append(part)
 
 		# Don't forget the last group
 		if concat_group:
@@ -1447,7 +1481,6 @@ class PythonCodeGenerator:
 		- Function calls: MID$(SI$,2,2) -> MID_s(SI_s,2,2)
 		- Boolean operators: AND, OR, NOT -> and, or, not
 		- Bitwise operators: AND, OR, NOT -> &, |, ~ (context-dependent)
-		- Implicit string concatenation: A$"B" -> A$ + "B"
 		"""
 		import re
 
@@ -1466,9 +1499,6 @@ class PythonCodeGenerator:
 
 		# Tokenize the expression
 		tokens = self._tokenize_expression(expr)
-
-		# Handle implicit string concatenation by inserting '+' operators
-		tokens = self._insert_concat_operators(tokens)
 
 		# Parse and convert
 		result = self._parse_expression_tokens(tokens, strings)
