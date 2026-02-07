@@ -594,6 +594,8 @@ class PythonCodeGenerator:
 		self.output_lines.append('Converted from C64 BASIC program')
 		self.output_lines.append('"""')
 		self.output_lines.append('')
+		self.output_lines.append('from cbmruntime import *')
+		self.output_lines.append('')
 
 	def _generate_data_constants(self):
 		"""Generate DATA constants if any DATA statements exist."""
