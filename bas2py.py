@@ -9,6 +9,7 @@ files to UTF-8 text. Phase 2 converts the text to Python.
 
 import argparse
 import sys
+import re
 from typing import List, Tuple, Dict, Optional
 from pathlib import Path
 
@@ -363,7 +364,6 @@ class StateMachineAnalyzer:
 		Returns:
 			Tuple of (line_number, statement_index)
 		"""
-		import re
 		match = re.search(r'(GOTO|GOSUB)\s*(\d+)', goto_content)
 		if match:
 			target_line = int(match.group(2))
@@ -622,7 +622,6 @@ class PythonCodeGenerator:
 		Returns:
 			List of parsed values
 		"""
-		import re
 		values = []
 		match = re.search(r'DATA\s*(.+)', data_content)
 		if match:
@@ -677,7 +676,6 @@ class PythonCodeGenerator:
 		Iterate through all statements and collect variable names that need
 		to be declared as global in the main function.
 		"""
-		import re
 		for line_num, statements in self.parser.get_coordinates():
 			for idx, stmt_info in enumerate(statements):
 				stmt_type = stmt_info['type']
@@ -921,7 +919,6 @@ class PythonCodeGenerator:
 				return True
 			# Also check for inline THEN <number>
 			if stmt_info:
-				import re
 				content = stmt_info.get('content', '')
 				if re.search(r'THEN\s*\d+', content):
 					return True
@@ -1003,7 +1000,6 @@ class PythonCodeGenerator:
 
 	def _convert_print(self, content: str) -> List[str]:
 		"""Convert PRINT statement to Python print()."""
-		import re
 		match = re.search(r'PRINT\s*(.*)', content)
 		if not match:
 			return ['print()']
@@ -1164,8 +1160,6 @@ class PythonCodeGenerator:
 
 		This method splits such items into separate parts.
 		"""
-		import re
-
 		if not item or not item.strip():
 			return [item]
 
@@ -1255,7 +1249,6 @@ class PythonCodeGenerator:
 
 	def _convert_let(self, content: str) -> List[str]:
 		"""Convert LET statement to Python assignment."""
-		import re
 		content = re.sub(r'^LET\s*', '', content.strip())
 
 		if '=' in content:
@@ -1272,7 +1265,6 @@ class PythonCodeGenerator:
 
 	def _convert_input(self, content: str) -> List[str]:
 		"""Convert INPUT statement to Python input()."""
-		import re
 		match = re.search(r'INPUT\s*(.+)', content)
 		if not match:
 			return ['# Invalid INPUT statement']
@@ -1295,7 +1287,6 @@ class PythonCodeGenerator:
 	def _convert_if(self, content: str, coord: Tuple[int, int],
 					jump_targets: Dict) -> List[str]:
 		"""Convert IF statement to Python if with state transition."""
-		import re
 		match = re.search(r'IF\s*(.+?)\s*THEN', content)
 		if not match:
 			return [f'# Invalid IF: {content}']
@@ -1373,7 +1364,6 @@ class PythonCodeGenerator:
 		Returns:
 			List of Python code lines
 		"""
-		import re
 		match = re.search(r'GOTO\s*(\d+)', content)
 		if not match:
 			return [f'# Invalid GOTO: {content}']
@@ -1399,7 +1389,6 @@ class PythonCodeGenerator:
 	def _convert_gosub(self, content: str, coord: Tuple[int, int],
 					   jump_targets: Dict) -> List[str]:
 		"""Convert GOSUB statement with stack push."""
-		import re
 		match = re.search(r'GOSUB\s*(\d+)', content)
 		if not match:
 			return [f'# Invalid GOSUB: {content}']
@@ -1425,7 +1414,6 @@ class PythonCodeGenerator:
 
 	def _convert_for(self, content: str, coord: Tuple[int, int]) -> List[str]:
 		"""Convert FOR statement to Python loop initialization."""
-		import re
 		match = re.search(r'FOR\s*(\w+)\s*=\s*(.+)\s*TO\s*(.+)', content)
 		if not match:
 			return [f'# Invalid FOR: {content}']
@@ -1463,7 +1451,6 @@ class PythonCodeGenerator:
 
 	def _convert_next(self, content: str, coord: Tuple[int, int]) -> List[str]:
 		"""Convert NEXT statement to loop continuation."""
-		import re
 		match = re.search(r'NEXT\s*(\w*)', content)
 		if not match:
 			return [f'# Invalid NEXT: {content}']
@@ -1503,7 +1490,6 @@ class PythonCodeGenerator:
 
 	def _convert_read(self, content: str) -> List[str]:
 		"""Convert READ statement to list indexing."""
-		import re
 		match = re.search(r'READ\s*(.+)', content)
 		if not match:
 			return [f'# Invalid READ: {content}']
@@ -1612,8 +1598,6 @@ class PythonCodeGenerator:
 		- Boolean operators: AND, OR, NOT -> and, or, not
 		- Bitwise operators: AND, OR, NOT -> &, |, ~ (context-dependent)
 		"""
-		import re
-
 		if not expr or not expr.strip():
 			return expr
 
@@ -1701,7 +1685,6 @@ class PythonCodeGenerator:
 
 	def _tokenize_expression(self, expr: str) -> list:
 		"""Tokenize a BASIC expression into tokens."""
-		import re
 		tokens = []
 		i = 0
 		expr = expr.strip()
@@ -1819,7 +1802,6 @@ class PythonCodeGenerator:
 
 	def _parse_expression_tokens(self, tokens: list, strings: list) -> str:
 		"""Parse tokens and convert to Python expression."""
-		import re
 		# Known BASIC functions that should keep parentheses
 		basic_functions = {
 			'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
@@ -1926,7 +1908,6 @@ class PythonCodeGenerator:
 
 	def _convert_arguments(self, tokens: list, strings: list) -> str:
 		"""Convert argument tokens back to a string."""
-		import re
 		if not tokens:
 			return ''
 
