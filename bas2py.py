@@ -791,10 +791,12 @@ class PythonCodeGenerator:
 		self.output_lines.append('	state = "line_{}_index_0"'.format(
 			self.parser.get_line_numbers()[0] if self.parser.get_line_numbers() else 0
 		))
+		self.output_lines.append('	prev_state = ""')
 		self.output_lines.append('	gosub_stack = []')
 		self.output_lines.append('	for_stack = []')
 		self.output_lines.append('')
 		self.output_lines.append('	while True:')
+		self.output_lines.append('		prev_state = state')
 
 		# Get state mapping and target information
 		state_mapping = self.analyzer.state_mapping
@@ -851,7 +853,7 @@ class PythonCodeGenerator:
 		if pretty:
 			self.output_lines.append('')
 		self.output_lines.append(f'		else:')
-		self.output_lines.append(f'			raise Exception(f"Unknown state: {{state}}")')
+		self.output_lines.append(f'			raise Exception(f"Unknown state: {{state}} previous: {{prev_state}}")')
 		self.output_lines.append('')
 		self.output_lines.append('')
 		self.output_lines.append("if __name__ == '__main__':")
