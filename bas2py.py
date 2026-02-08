@@ -791,7 +791,6 @@ class PythonCodeGenerator:
 		))
 		self.output_lines.append('	prev_state = ""')
 		self.output_lines.append('	gosub_stack = []')
-		self.output_lines.append('	for_stack = []')
 		self.output_lines.append('')
 		self.output_lines.append('	while True:')
 		self.output_lines.append('		prev_state = state')
@@ -1442,51 +1441,34 @@ class PythonCodeGenerator:
 		self.variables.add(py_var)
 
 		# Store loop info with current value tracking
-		# We'll use a dictionary to track loop variables instead of locals()
 		return [
 			f'# {content}',
-			f'{py_var} = {py_start}',
-			f'for_stack.append(("{py_var}", {py_end}, {py_step}, "{loop_body_state}"))'
+			f'{py_var} = FOR("{py_var}", {py_start}, {py_end}, {py_step}, "{loop_body_state}")',
 		]
 
 	def _convert_next(self, content: str, coord: Tuple[int, int]) -> List[str]:
 		"""Convert NEXT statement to loop continuation."""
-		match = re.search(r'NEXT\s*(\w*)', content)
+		match = re.search(r'NEXT\s*(.*)', content)
 		if not match:
 			return [f'# Invalid NEXT: {content}']
 
-		var = match.group(1).strip()
+		vars = match.group(1).strip()
+		if not vars:
+			vars = 'None'
+		elif ',' in vars:
+			vars = [f'"{v.strip()}"' for v in vars.split(',')]
+			vars = f'[' + ', '.join([v for v in vars]) + ']'
+		else:
+			vars = f'["{vars}"]'
 
 		# Get next line for fall-through (when loop completes)
 		next_line, next_index = self._get_next_coordinates(coord)
 		next_state = f'line_{next_line}_index_{next_index}'
 
 		# Build the NEXT logic with proper state transitions
-		# Use the variable name from stack if NEXT has no variable specified
-		# Build the NEXT logic using the stored current value in for_stack
-		# This works for both cases: NEXT with or without variable name
-		lines = [
-			f'# {content}',
-			'if not for_stack:',
-			'	raise Exception("NEXT without FOR")',
-			'# Get loop info from dict: (var, end, step, body)',
-			'_lv, _le, _ls, _lb = for_stack[-1]',
-			'_lc = globals()[_lv]',
-			'_lnv = _lc + _ls',
-			'globals()[_lv] = _lnv',
-			'# Check if loop should continue',
-			'if (_ls >= 0 and _lnv > _le) or (_ls < 0 and _lnv < _le):',
-			'	# Loop complete - remove from stack and continue to next line',
-			'	for_stack.pop()',
-			f'	state = "{next_state}"',
-			'	continue',
-			'else:',
-			'	# Loop continues - update stored current value and jump back',
-			'	state = _lb',
-			'	continue',
+		return [
+			f'state = NEXT({vars}, globals(), "{next_state}")',
 		]
-
-		return lines
 
 	def _convert_read(self, content: str) -> List[str]:
 		"""Convert READ statement to list indexing."""
