@@ -1001,22 +1001,22 @@ class PythonCodeGenerator:
 		"""Convert PRINT statement to Python print()."""
 		match = re.search(r'PRINT\s*(.*)', content)
 		if not match:
-			return ['print()']
+			return ['cbmprint()']
 
 		args = match.group(1).strip()
 		if not args:
-			return ['print()']
+			return ['cbmprint()']
 
 		parts, semicolon_end = self._parse_print_args(args)
 
 		if not parts:
-			return ['print()' if not semicolon_end else 'print(end="")']
+			return ['cbmprint()' if not semicolon_end else 'cbmprint(end="")']
 
 		joined = ', '.join(parts)
 		if semicolon_end:
-			return [f'print({joined}, end="")']
+			return [f'cbmprint({joined}, end="")']
 		else:
-			return [f'print({joined})']
+			return [f'cbmprint({joined})']
 
 	def _parse_print_args(self, args: str) -> Tuple[List[str], bool]:
 		"""Parse PRINT arguments and return parts and whether it ends with semicolon.
