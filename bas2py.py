@@ -1447,22 +1447,7 @@ class PythonCodeGenerator:
 		py_step = self._convert_expression(str(step_val))
 
 		# Calculate the loop body target (statement after FOR)
-		line_num, idx = coord
-		loop_body_line = line_num
-		loop_body_idx = idx + 1
-
-		# Check if next statement exists in same line
-		if (line_num, idx + 1) not in self.parser.index_mapping:
-			# Next statement is on next line
-			line_numbers = self.parser.get_line_numbers()
-			try:
-				line_idx = line_numbers.index(line_num)
-				if line_idx + 1 < len(line_numbers):
-					loop_body_line = line_numbers[line_idx + 1]
-					loop_body_idx = 0
-			except ValueError:
-				pass
-
+		loop_body_line, loop_body_idx = self._get_next_coordinates(coord)
 		loop_body_state = f'line_{loop_body_line}_index_{loop_body_idx}'
 
 		# Track the loop variable
@@ -1471,8 +1456,9 @@ class PythonCodeGenerator:
 		# Store loop info with current value tracking
 		# We'll use a dictionary to track loop variables instead of locals()
 		return [
+			f'# {content}',
 			f'{py_var} = {py_start}',
-			f'for_stack.append({{"var": "{py_var}", "current": {py_start}, "end": {py_end}, "step": {py_step}, "body": "{loop_body_state}"}})'
+			f'for_stack.append(("{py_var}", {py_end}, {py_step}, "{loop_body_state}"))'
 		]
 
 	def _convert_next(self, content: str, coord: Tuple[int, int]) -> List[str]:
@@ -1493,45 +1479,25 @@ class PythonCodeGenerator:
 		# Build the NEXT logic using the stored current value in for_stack
 		# This works for both cases: NEXT with or without variable name
 		lines = [
+			f'# {content}',
 			'if not for_stack:',
 			'	raise Exception("NEXT without FOR")',
-			'# Get loop info from dict: {var, current, end, step, body}',
-			'loop_info = for_stack[-1]',
-			'_lv = loop_info["var"]',
-			'_lc = loop_info["current"]',
-			'_le = loop_info["end"]',
-			'_ls = loop_info["step"]',
-			'_lb = loop_info["body"]',
-			'# Increment loop current value',
+			'# Get loop info from dict: (var, end, step, body)',
+			'_lv, _le, _ls, _lb = for_stack[-1]',
+			'_lc = globals()[_lv]',
 			'_lnv = _lc + _ls',
-			'# Update the actual loop variable using globals()',
 			'globals()[_lv] = _lnv',
 			'# Check if loop should continue',
 			'if (_ls >= 0 and _lnv > _le) or (_ls < 0 and _lnv < _le):',
 			'	# Loop complete - remove from stack and continue to next line',
 			'	for_stack.pop()',
-		]
-
-		# Add state transition for loop complete case
-		if next_state:
-			lines.append(f'	state = "{next_state}"')
-			lines.append(f'	continue')
-		else:
-			# No next line - check if we need to RETURN from GOSUB
-			lines.append(f'	if gosub_stack:')
-			lines.append(f'		state = gosub_stack.pop()')
-			lines.append(f'		continue')
-			lines.append(f'	else:')
-			lines.append(f'		break  # End of program')
-
-		# Add the else clause for loop continuation
-		lines.extend([
+			f'	state = "{next_state}"',
+			'	continue',
 			'else:',
 			'	# Loop continues - update stored current value and jump back',
-			'	for_stack[-1]["current"] = _lnv',
 			'	state = _lb',
 			'	continue',
-		])
+		]
 
 		return lines
 
