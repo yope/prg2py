@@ -47,3 +47,7 @@ def NEXT(vars, glob, next_state):
 		print(f"for_dict = {for_dict!r}, for_last_var = {for_last_var!r}")
 		raise Exception("NEXT without FOR")
 	return next_state
+
+def cbmprint(*args, **kvargs):
+	cbmtext = "".join([str(arg) for arg in args])
+	print(cbmtext, **kvargs)
