@@ -1269,9 +1269,18 @@ class PythonCodeGenerator:
 			return ['# Invalid INPUT statement']
 
 		var_list = match.group(1).strip()
+
+		if var_list.startswith('"'):
+			prompt = var_list[1:]
+			prompt = prompt[:prompt.index('"')]
+			# cut string after len(prompt) + 2x quote + ";"
+			var_list = var_list[len(prompt) + 3:]
+		else:
+			prompt = ""
+
 		vars = [v.strip() for v in var_list.split(',')]
 
-		lines = []
+		lines = [f'cbmprint("{prompt}", end="? ")']
 		for var in vars:
 			py_var = self._convert_variable(var)
 			# Track the input variable
