@@ -1,5 +1,6 @@
 
 import re
+import time
 
 def LEN(x):
 	return len(x)
@@ -26,6 +27,10 @@ def FOR(var, start, end, step, body_state):
 	return start
 
 def NEXT(vars, glob, next_state):
+	# A C64 FOR loop iteration takes about 1.55ms to execte.
+	# Often empty FOR loops are used as delay loops. For these
+	# to work, we emulate the original C64 performance with this sleep:
+	time.sleep(0.00155)
 	did_next = False
 	if vars is None:
 		vars = [for_last_var]
