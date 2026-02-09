@@ -87,6 +87,15 @@ _colors = {
 	"LIGHT-GREY": (160, 160, 160),
 }
 
+_cursor_codes = {
+	"CRSR-UP": "\x1b[1A",
+	"CRSR-DOWN": "\x1b[1B",
+	"CRSR-RIGHT": "\x1b[1C",
+	"CRSR-LEFT": "\x1b[1D",
+	"HOME": "\x1b[H",
+	"CLEAR": "\x1b[2J\x1b[H"
+}
+
 def _mkansi(color):
 	r, g, b = _colors[color]
 	return f';2;{r};{g};{b}m'
@@ -130,6 +139,8 @@ def _cbm_ctrl(code):
 		if _rvs:
 			_rvs = False
 			out = _screen2ansi()
+	elif code in _cursor_codes:
+		out = _cursor_codes[code]
 	else:
 		out = "{" + code + "}"
 
