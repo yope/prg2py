@@ -566,6 +566,8 @@ class PythonCodeGenerator:
 		self.output_lines: List[str] = []
 		self.data_constants: List[str] = []
 		self.variables: set = set()  # Track all BASIC variables used
+		self.auto_dim: set = set()
+		self.auto_dim_insertion = -1
 
 	def generate(self, include_header: bool = True, pretty: bool = False) -> str:
 		"""Generate complete Python source code.
@@ -783,7 +785,11 @@ class PythonCodeGenerator:
 						self.output_lines.append(f'	{var} = ""')
 					elif not var.endswith('_l'):
 						self.output_lines.append(f'	{var} = 0')
+					else:
+						self.auto_dim.add(var)
 
+		self.auto_dim_insertion = len(self.output_lines)
+		self.output_lines.append('	# PLACEHOLDER')
 		self.output_lines.append('	global DATA_INDEX, PROGRAM_DATA')
 		self.output_lines.append('	# Initialize state and stacks')
 		self.output_lines.append('	state = "line_{}_index_0"'.format(
@@ -847,6 +853,8 @@ class PythonCodeGenerator:
 					self.output_lines.append(f'			break')
 
 		# Add else clause for unknown states
+		adl = ['"'+x+'"' for x in self.auto_dim]
+		self.output_lines[self.auto_dim_insertion] = f'	autodim(globals(), {",".join(adl)})'
 		if pretty:
 			self.output_lines.append('')
 		self.output_lines.append(f'		else:')
@@ -1558,6 +1566,7 @@ class PythonCodeGenerator:
 			for d in dim:
 				dims = f'[{dims}] * {d}'
 			lines.append(f"{name} = {dims}")
+			self.auto_dim.discard(name)
 		return lines
 
 	def _convert_variable(self, var: str, onlyname: bool = False) -> str:
