@@ -1789,7 +1789,7 @@ class PythonCodeGenerator:
 		# Known BASIC functions that should keep parentheses
 		basic_functions = {
 			'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
-			'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT',
+			'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT', 'RND',
 			'ABS', 'SIN', 'COS', 'TAN', 'ATN', 'LOG', 'EXP',
 			'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE', 'TAB'
 		}
@@ -1935,7 +1935,7 @@ class PythonCodeGenerator:
 					arg_tokens = tokens[paren_start + 1:j - 1]
 					basic_functions = {
 						'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
-						'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT',
+						'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT', 'RND',
 						'ABS', 'SIN', 'COS', 'TAN', 'ATN', 'LOG', 'EXP',
 						'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE'
 					}
