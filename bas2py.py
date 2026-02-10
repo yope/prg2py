@@ -633,7 +633,7 @@ class PythonCodeGenerator:
 			for part in parts:
 				part = part.strip()
 				if part.startswith('"') and part.endswith('"'):
-					values.append(part)
+					values.append(part.strip('"'))
 				else:
 					try:
 						if '.' in part:
