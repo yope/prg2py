@@ -1893,83 +1893,8 @@ class PythonCodeGenerator:
 		if not tokens:
 			return ''
 
-		# Reconstruct the expression from tokens
-		result = []
-		i = 0
-
-		while i < len(tokens):
-			token_type, token_value = tokens[i]
-
-			if token_type == 'STRING':
-				match = re.match(r'__STR_(\d+)__', token_value)
-				if match:
-					idx = int(match.group(1))
-					if idx < len(strings):
-						result.append(strings[idx])
-					else:
-						result.append(token_value)
-				else:
-					result.append(token_value)
-
-			elif token_type == 'NUMBER':
-				result.append(token_value)
-
-			elif token_type == 'IDENT':
-				var_name = token_value
-				py_var = self._convert_variable(var_name)
-
-				# Check for nested array/function calls
-				if i + 1 < len(tokens) and tokens[i + 1] == ('OP', '('):
-					paren_start = i + 1
-					paren_depth = 1
-					j = paren_start + 1
-					while j < len(tokens) and paren_depth > 0:
-						if tokens[j] == ('OP', '('):
-							paren_depth += 1
-						elif tokens[j] == ('OP', ')'):
-							paren_depth -= 1
-						j += 1
-
-					arg_tokens = tokens[paren_start + 1:j - 1]
-					upper_var = var_name.upper()
-					if upper_var in self.basic_functions or upper_var.rstrip('$') in self.basic_functions:
-						args_str = self._convert_arguments(arg_tokens, strings)
-						result.append(f'{py_var}({args_str})')
-					else:
-						args_str = self._convert_arguments(arg_tokens, strings)
-						result.append(f'{py_var}_l[{args_str}]')
-
-					i = j - 1
-				else:
-					result.append(py_var)
-
-			elif token_type == 'KEYWORD':
-				if token_value == 'AND':
-					result.append('and')
-				elif token_value == 'OR':
-					result.append('or')
-				elif token_value == 'NOT':
-					result.append('not')
-				else:
-					result.append(token_value.lower())
-
-			elif token_type == 'OP':
-				if token_value == '=':
-					result.append('==')
-				elif token_value in ('<>', '><'):
-					result.append('!=')
-				elif token_value == '<=':
-					result.append('<=')
-				elif token_value == '>=':
-					result.append('>=')
-				elif token_value in ('(', ')', '[', ']', ',', ';'):
-					result.append(token_value)
-				else:
-					result.append(token_value)
-
-			i += 1
-
-		return ' '.join(result)
+		# Simply delegate to _parse_expression_tokens since the logic is identical
+		return self._parse_expression_tokens(tokens, strings)
 
 	def _convert_condition(self, condition: str) -> str:
 		"""Convert BASIC condition to Python condition."""
