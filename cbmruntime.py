@@ -188,11 +188,9 @@ def cbmprint(*args, **kvargs):
 	cbmtext = "".join([str(arg) for arg in args])
 	outtext = re.sub(r"\{([a-zA-Z0-9\-\\]+)\}", _code_match, cbmtext)
 	if _rvs and "end" not in kvargs:
-		#print("Add RVS off")
 		outtext += _cbm_ctrl("RVS-OFF") + "\n"
 		kvargs["end"] = ""
 		cbmtext += "\n"
-	#print(cbmtext, **kvargs)
 	print(outtext, **kvargs)
 
 if __name__ == "__main__":
