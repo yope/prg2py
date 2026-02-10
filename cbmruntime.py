@@ -1,6 +1,7 @@
 
 import re
 import time
+import copy
 
 def LEN(x):
 	return len(x)
@@ -55,6 +56,20 @@ def NEXT(vars, glob, next_state):
 		raise Exception("NEXT without FOR")
 	return next_state
 
+def DIM(dimtype, *sizes):
+	ret = dimtype
+	for s in sizes:
+		ret = [ret]
+		nret = []
+		for i in range(s):
+			nret.extend(copy.deepcopy(ret))
+		ret = nret
+	return ret
+
+def autodim(glob, *varnames):
+	for v in varnames:
+		dimtype = "" if '_s' in v else 0
+		glob[v] = DIM(dimtype, 11)
 _rvs = False
 _color = None
 _screen_bg = "BLACK"
