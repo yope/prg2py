@@ -1556,7 +1556,7 @@ class PythonCodeGenerator:
 	def _convert_variable(self, var: str, onlyname: bool = False) -> str:
 		"""Convert BASIC variable to Python identifier."""
 		if onlyname and '(' in var:
-			var = var.split('(')[0]
+			var = var.split('(')[0] + '_l'
 		#var = var.replace('%', '_i').replace('$', '_s').replace('(','[').replace(')',']')
 		var = var.replace('%', '_i').replace('$', '_s')
 		varout = ""
@@ -1946,7 +1946,7 @@ class PythonCodeGenerator:
 						result.append(f'{py_var}({args_str})')
 					else:
 						args_str = self._convert_arguments(arg_tokens, strings)
-						result.append(f'{py_var}[{args_str}]')
+						result.append(f'{py_var}_l[{args_str}]')
 
 					i = j - 1
 				else:
