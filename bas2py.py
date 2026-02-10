@@ -1559,13 +1559,12 @@ class PythonCodeGenerator:
 		for var, dim in varlist:
 			name = var.split('(')[0]
 			name = self._convert_variable(name)
-			if name.endswith('_s'):
-				dims = '""'
+			if '_s' in name:
+				dimtype = '""'
 			else:
-				dims = '0'
-			for d in dim:
-				dims = f'[{dims}] * {d}'
-			lines.append(f"{name} = {dims}")
+				dimtype = '0'
+			dims = ", ".join([str(d) for d in dim])
+			lines.append(f"{name} = DIM({dimtype}, {dims})")
 			self.auto_dim.discard(name)
 		return lines
 
