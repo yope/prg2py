@@ -1082,6 +1082,7 @@ class PythonCodeGenerator:
 		# Handle remaining item
 		if current_item.strip():
 			parts.append(self._convert_expression(current_item.strip()))
+			has_trailing_semicolon = parts[-1].endswith(';')
 		elif has_trailing_semicolon and not parts:
 			# Edge case: only a semicolon
 			has_trailing_semicolon = True
