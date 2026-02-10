@@ -552,7 +552,12 @@ class StateMachineAnalyzer:
 
 class PythonCodeGenerator:
 	"""Generate Python code from analyzed BASIC program."""
-
+	basic_functions = {
+		'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
+		'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT', 'RND',
+		'ABS', 'SIN', 'COS', 'TAN', 'ATN', 'LOG', 'EXP',
+		'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE', 'TAB'
+	}
 	def __init__(self, analyzer: StateMachineAnalyzer, verbose: bool = False):
 		"""Initialize generator with analyzer.
 
@@ -1786,12 +1791,6 @@ class PythonCodeGenerator:
 	def _parse_expression_tokens(self, tokens: list, strings: list) -> str:
 		"""Parse tokens and convert to Python expression."""
 		# Known BASIC functions that should keep parentheses
-		basic_functions = {
-			'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
-			'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT', 'RND',
-			'ABS', 'SIN', 'COS', 'TAN', 'ATN', 'LOG', 'EXP',
-			'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE', 'TAB'
-		}
 
 		result = []
 		i = 0
@@ -1836,7 +1835,7 @@ class PythonCodeGenerator:
 
 					# Check if this is a function call or array access
 					upper_var = var_name.upper()
-					if upper_var in basic_functions or upper_var.rstrip('$') in basic_functions:
+					if upper_var in self.basic_functions or upper_var.rstrip('$') in self.basic_functions:
 						# It's a function call - keep parentheses
 						args_str = self._convert_arguments(arg_tokens, strings)
 						result.append(f'{py_var}({args_str})')
@@ -1932,15 +1931,8 @@ class PythonCodeGenerator:
 						j += 1
 
 					arg_tokens = tokens[paren_start + 1:j - 1]
-					basic_functions = {
-						'MID', 'MID$', 'LEFT', 'LEFT$', 'RIGHT', 'RIGHT$',
-						'CHR', 'CHR$', 'STR', 'STR$', 'VAL', 'INT', 'RND',
-						'ABS', 'SIN', 'COS', 'TAN', 'ATN', 'LOG', 'EXP',
-						'SQR', 'SGN', 'LEN', 'ASC', 'PEEK', 'POKE'
-					}
-
 					upper_var = var_name.upper()
-					if upper_var in basic_functions or upper_var.rstrip('$') in basic_functions:
+					if upper_var in self.basic_functions or upper_var.rstrip('$') in self.basic_functions:
 						args_str = self._convert_arguments(arg_tokens, strings)
 						result.append(f'{py_var}({args_str})')
 					else:
