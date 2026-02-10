@@ -2,6 +2,7 @@
 import re
 import time
 import copy
+import random
 
 def LEN(x):
 	return len(x)
@@ -66,10 +67,23 @@ def DIM(dimtype, *sizes):
 		ret = nret
 	return ret
 
+def RND(x):
+	# FIXME: Implement real C64 prng, where x<0 numbers return the same
+	# result eacht time for the same x, and x==0 uses hrng
+	return random.random()
+
+def TAB(x):
+	# FIXME: If the result of TAB(x) would be a position left of the actual
+	# cursor position, the cursor should stay where it is. This requires
+	# cursor position tracking or querying the terminal, which is more
+	# involved. For now assume TAB(x) will actually result in cursor movement.
+	return f"\r\x1b[{x}C"
+
 def autodim(glob, *varnames):
 	for v in varnames:
 		dimtype = "" if '_s' in v else 0
 		glob[v] = DIM(dimtype, 11)
+
 _rvs = False
 _color = None
 _screen_bg = "BLACK"
