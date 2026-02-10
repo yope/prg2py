@@ -1327,10 +1327,14 @@ class PythonCodeGenerator:
 		except ValueError:
 			pass
 
-		if next_stmt and next_stmt['type'] == 'GOTO':
+		# Check for inline THEN target
+		goto_match = re.search(r'THEN\s*(\d+)', content)
+		if (next_stmt and next_stmt['type'] == 'GOTO') or \
+				(goto_match):
 			# IF THEN GOTO pattern
-			goto_content = next_stmt['content']
-			goto_match = re.search(r'GOTO\s*(\d+)', goto_content)
+			if next_stmt:
+				goto_content = next_stmt['content']
+				goto_match = re.search(r'GOTO\s*(\d+)', goto_content)
 			if goto_match:
 				target_line = int(goto_match.group(1))
 				target_state = f'line_{target_line}_index_0'
@@ -1338,36 +1342,16 @@ class PythonCodeGenerator:
 				# If true, goto target. If false, goto next line.
 				lines.append(f'if {py_condition}:')
 				lines.append(f'	state = "{target_state}"')
-				lines.append(f'	continue')
 				# Add else clause for false branch
 				if false_state and false_state != target_state:
 					lines.append(f'else:')
-					lines.append(f'	# Condition false - go to next line')
 					lines.append(f'	state = "{false_state}"')
-					lines.append(f'	continue')
 		else:
-			# Check for inline THEN target
-			then_match = re.search(r'THEN\s*(\d+)', content)
-			if then_match:
-				target_line = int(then_match.group(1))
-				target_state = f'line_{target_line}_index_0'
-
-				# If true, goto target. If false, goto next line.
-				lines.append(f'if {py_condition}:')
-				lines.append(f'	state = "{target_state}"')
+			# IF THEN with statement - just check condition, if false skip to next line
+			if false_state:
+				lines.append(f'if not ({py_condition}):')
+				lines.append(f'	state = "{false_state}"')
 				lines.append(f'	continue')
-				# Add else clause for false branch
-				if false_state and false_state != target_state:
-					lines.append(f'else:')
-					lines.append(f'	# Condition false - go to next line')
-					lines.append(f'	state = "{false_state}"')
-					lines.append(f'	continue')
-			else:
-				# IF THEN with statement - just check condition, if false skip to next line
-				if false_state:
-					lines.append(f'if not ({py_condition}):')
-					lines.append(f'	state = "{false_state}"')
-					lines.append(f'	continue')
 
 		return lines
 
