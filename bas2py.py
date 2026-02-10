@@ -847,7 +847,6 @@ class PythonCodeGenerator:
 				if next_coord:
 					next_state = self._coord_to_state_name(next_coord, state_mapping)
 					self.output_lines.append(f'			state = "{next_state}"')
-					self.output_lines.append(f'			continue')
 				else:
 					# End of program
 					self.output_lines.append(f'			break')
