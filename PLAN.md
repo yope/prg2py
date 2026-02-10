@@ -143,20 +143,30 @@ while True:
     - A, X, Y (float) → Python `float` variables
     - A%, X% (integer) → Python `int` variables with `_i` suffix
     - S$, T$ (string) → Python `str` variables with `_s` suffix
+    - Arrays → Python `list` variables with `_l` suffix appended after type suffix
+      - A(), B() → `A_l`, `B_l` (float arrays)
+      - A%(), X%() → `A_i_l`, `X_i_l` (integer arrays)
+      - S$(), T$() → `S_s_l`, `T_s_l` (string arrays)
 
 2. Implement statement-to-Python conversion mapping:
-    - `PRINT` → Python `print()`
+    - `PRINT` → Python `cbmprint()` (from cbmruntime.py for PETSCII support)
     - implicit `LET` → Python assignment `var = value`
     - `IF ... THEN` → Python `if`: if true (continue), if false (state=next_line_index_0 + continue)
     - `GOTO` → State assignment to target_line_index_0 + continue
     - `DATA` → List constant definition
     - `READ` → List indexing
-    - `FOR ... TO` → Loop with counter and state tracking
-    - `NEXT` → Loop increment and continue (no state change)
+    - `FOR ... TO` → Loop with counter and state tracking using cbmruntime.FOR()
+    - `NEXT` → Loop increment using cbmruntime.NEXT()
     - `GOSUB` → Push current state to stack, continue (no state change)
     - `RETURN` → Pop state from stack and change state, then continue
     - `REM` → Comment (no `#` prefix)
     - `:` → Sequential statement separator
+    - `DIM` → Array initialization using cbmruntime.DIM()
+    - `LEN(x)` → cbmruntime.LEN(x)
+    - `MID$(x,i,l)` → cbmruntime.MID_s(x,i,l)
+    - `INT(x)` → cbmruntime.INT(x)
+    - `RND(x)` → cbmruntime.RND(x)
+    - `TAB(x)` → cbmruntime.TAB(x)
 
 3. Generate main() function with:
    - State variable initialization
@@ -211,6 +221,48 @@ def main():
 
 ### Deliverable:
 - Python code generation engine producing executable Python
+
+---
+
+## Phase 4.5: Runtime Library Integration
+**Goal:** Implement and integrate cbmruntime.py for BASIC function support.
+
+### Sub-tasks:
+1. **Core Functions:**
+   - `LEN(x)` - String length
+   - `MID_s(x, i, l)` - Substring extraction (1-based indexing)
+   - `INT(x)` - Integer conversion
+   - `RND(x)` - Random number generation
+   - `TAB(x)` - ANSI cursor positioning
+
+2. **Array Support:**
+   - `DIM(dimtype, *sizes)` - Multi-dimensional array creation
+   - `autodim(glob, *varnames)` - Automatic array dimensioning
+
+3. **Loop Control:**
+   - `FOR(var, start, end, step, body_state)` - FOR loop initialization
+   - `NEXT(vars, glob, next_state)` - FOR loop iteration with C64 timing
+
+4. **Terminal Output:**
+   - `cbmprint(*args, **kvargs)` - PETSCII to ANSI translation
+   - Color code support (16 C64 colors)
+   - Cursor control codes
+   - Reverse video support
+
+5. **Integration:**
+   - Generated Python code imports from cbmruntime
+   - All PRINT statements use cbmprint()
+   - All loops use FOR/NEXT from runtime
+
+### Testing Requirements:
+- Runtime functions match C64 BASIC behavior
+- PETSCII codes render correctly in xterm
+- Array operations work with multiple dimensions
+- FOR loops have correct timing for delay loops
+
+### Deliverable:
+- `cbmruntime.py` with all BASIC function implementations
+- Generated code imports and uses runtime correctly
 
 ---
 
@@ -352,6 +404,7 @@ def main():
 2. State Machine Analyzer (statement-indexed)
 3. Python Code Generator
 4. CLI Interface
+5. Runtime Library (cbmruntime.py) - BASIC function implementations
 
 **Key Design Patterns:**
 - Fallthrough state machine with 2D coordinates (line_number, index)
@@ -359,12 +412,16 @@ def main():
 - Automatic index progression within lines
 - Multi-path branching from IF/THEN in same line
 - Special handling for NEXT/GOSUB/RETURN with exact coordinates
+- Runtime library pattern for BASIC function implementations
+- PETSCII-to-ANSI translation for terminal compatibility
 
 **Critical Success Factors:**
 - Correct control flow translation handling multi-statement lines
 - Proper index-based state optimization
 - Variable naming compliance
 - Code quality (PEP-8, no trailing whitespace)
+- Runtime library functions match C64 BASIC semantics
+- PETSCII escape codes render correctly in xterm
 
 **Critical Design Decisions:**
 1. **Multi-statement support**: Colons in same line create separate statement indices
@@ -372,6 +429,7 @@ def main():
 3. **Exact coordinates**: All jumps (GOTO, GOSUB, RETURN) use precise coordinate system
 4. **Automatic fallthrough**: Indices automatically increment within lines
 5. **Return tracking**: GOSUB must record exact return coordinates
+6. **Array naming**: Arrays use `_l` suffix to distinguish from scalar variables (e.g., `C` → `C`, `C(10)` → `C_l`)
 
 **Example State Flow:**
 ```
@@ -399,13 +457,33 @@ Estimated **development effort**: Phases 1-6 each take approximately 2-3 hours d
 | A, B, C, X, Y  | float       | No suffix (float)  |
 | A%, X%         | int         | `_i` suffix (int)  |
 | S$, T$         | str         | `_s` suffix (str)  |
+| **Arrays**     |             |                    |
+| A(), B(), C()  | list        | `_l` suffix (list) |
+| A%(), X%()     | list        | `_i_l` suffix      |
+| S$(), T$()     | list        | `_s_l` suffix      |
+
+**Note:** Arrays use the `_l` suffix to distinguish them from scalar variables with the same name. For example, `C` (float scalar) and `C(10)` (float array) become `C` and `C_l` in Python.
+
+### BASIC Function Mapping Table
+| BASIC Function | Python Runtime Call | Description |
+|----------------|---------------------|-------------|
+| `LEN(x)`       | `LEN(x)`            | String length |
+| `MID$(s,i,l)`  | `MID_s(s,i,l)`      | Substring (1-based index) |
+| `INT(x)`       | `INT(x)`            | Integer conversion |
+| `RND(x)`       | `RND(x)`            | Random number (0.0-1.0) |
+| `TAB(x)`       | `TAB(x)`            | Cursor positioning |
+| `DIM A(n)`     | `A = DIM(0, n)`     | Array initialization |
+| `FOR/NEXT`     | `FOR()` / `NEXT()`  | Loop with timing |
+| `PRINT`        | `cbmprint()`        | Terminal output with PETSCII |
 
 ### Required Files
 - FSP.md - Complete functional specifications
 - AGENTS.md - Agent guidance and coding conventions
+- PLAN.md - This development plan document
 - example1.bas - Sample BASIC input
 - example1.py - Expected Python output
-- petscii2text.py - Phase 1 converter
+- petscii2text.py - Phase 1 converter (PRG to UTF-8)
+- cbmruntime.py - BASIC runtime library with function implementations
 
 ### Running the Tool
 ```bash
@@ -419,6 +497,8 @@ python bas2py.py example1.bas output.py -v --pretty-structures
 CBM BASIC to Python Translator
 Converts C64 BASIC programs to executable Python code.
 """
+
+from cbmruntime import *
 
 # State definition and program execution...
 

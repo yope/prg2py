@@ -45,6 +45,8 @@ C64 BASIC to Python Translator
 Original program converted from: PROGRAM_NAME
 """
 
+from cbmruntime import *
+
 def main():
     # Program state
     state = "init"
@@ -224,22 +226,28 @@ elif state == "line_110":
 
 | BASIC Statement | Python Equivalent |
 |----------------|-------------------|
-| `PRINT` | `print()` |
+| `PRINT` | `cbmprint()` (with PETSCII escape code translation) |
 | `"HELLO"` | `"HELLO"` (string literal) |
 | `INPUT` | `input()` |
 | `LET` | assignment operator `=` |
 | `IF ... THEN` | conditional state transition |
 | `GOTO` | state assignment |
 | `END` | loop termination or explicit return |
-| `FOR ... TO ... STEP` | loop with counter increment |
-| `NEXT` | loop iteration and counter update |
+| `FOR ... TO ... STEP` | `cbmruntime.FOR()` / `cbmruntime.NEXT()` |
+| `NEXT` | Loop control via runtime |
 | `RETURN` | state assignment to return position |
 | `GOSUB` | state assignment with return tracking |
 | `DATA` | list constant |
 | `READ` | list indexing |
 | `REM` | comment (apostrophe `'` is NOT supported in C64 BASIC) |
 | `:` | new statement on same line |
-| Variable conversion | `%` → `_i` (integer), `$` → `_s` (string) |
+| `DIM` | Array initialization using `cbmruntime.DIM()` |
+| `LEN(x)` | `cbmruntime.LEN(x)` |
+| `MID$(x,i,l)` | `cbmruntime.MID_s(x,i,l)` |
+| `INT(x)` | `cbmruntime.INT(x)` |
+| `RND(x)` | `cbmruntime.RND(x)` |
+| `TAB(x)` | `cbmruntime.TAB(x)` (ANSI escape codes) |
+| Variable conversion | `%` → `_i`, `$` → `_s`, array `()` → `_l` |
 | **Note**: C64 BASIC does not support the apostrophe (`'`) as REM abbreviation; only `REM` keyword is recognized |
 
 ### Variables
@@ -252,7 +260,13 @@ elif state == "line_110":
   - Example: `A%`, `X%`, `ABC%`, `XY%` → `A_i`, `X_i`, `ABC_i`, `XY_i`
 - **String variables**: one or two letters followed by dollar symbol `$`
   - Example: `A$`, `X$`, `ABC$`, `XY$` → `A_s`, `X_s`, `ABC_s`, `XY_s`
+- **Arrays**: Same base name with `_l` suffix (to distinguish from scalars)
+  - Float arrays: `A()`, `X()` → `A_l`, `X_l`
+  - Integer arrays: `A%()`, `X%()` → `A_i_l`, `X_i_l`
+  - String arrays: `A$()`, `X$()` → `A_s_l`, `X_s_l`
 - Character handling maintains UTF-8 encoding
+
+**Note:** In C64 BASIC, a variable and array can share the same name (e.g., `C` and `C(10)` are distinct). The `_l` suffix ensures they remain separate in Python.
 
 ## Execution Flow
 
@@ -414,23 +428,57 @@ if state == "init":
     continue
 ```
 
+## Runtime Library (cbmruntime.py)
+
+The translator relies on `cbmruntime.py` for BASIC function implementations and terminal compatibility:
+
+### Core Functions
+- **`LEN(x)`**: Returns length of string x
+- **`MID_s(x, i, l)`**: Returns substring starting at position i (1-based), length l
+- **`INT(x)`**: Returns integer portion of x
+- **`RND(x)`**: Returns random float (0.0 to 1.0)
+- **`TAB(x)`**: Returns ANSI escape sequence for cursor positioning
+
+### Array Support
+- **`DIM(dimtype, *sizes)`**: Creates multi-dimensional arrays initialized with dimtype
+- **`autodim(glob, *varnames)`**: Auto-dimensions arrays with default size 11
+
+### Loop Control
+- **`FOR(var, start, end, step, body_state)`**: Initializes FOR loop
+- **`NEXT(vars, glob, next_state)`**: Iterates FOR loop with ~1.55ms delay per iteration
+
+### Terminal Output
+- **`cbmprint(*args, **kvargs)`**: Prints with PETSCII escape code translation to ANSI
+  - Supports C64 color codes: {BLACK}, {WHITE}, {RED}, {CYAN}, etc.
+  - Supports cursor control: {CRSR-UP}, {CRSR-DOWN}, {HOME}, {CLEAR}
+  - Supports reverse video: {RVS-ON}, {RVS-OFF}
+
+### PETSCII Escape Format
+PETSCII control codes are tokenized by `petscii2text.py` as `{CODE}` sequences:
+- Colors: `{BLUE}`, `{RED}`, `{GREEN}`, `{YELLOW}`, etc.
+- Cursor: `{CRSR-UP}`, `{CRSR-DOWN}`, `{CRSR-LEFT}`, `{CRSR-RIGHT}`
+- Screen: `{HOME}`, `{CLEAR}`, `{RVS-ON}`, `{RVS-OFF}`
+
 ## Future Enhancements
 
 1. **Type Inference**: Add type annotations for variables
 2. **Constants**: Handle variable initial values differently
-3. **Array Support**: Implement DIM and array index operations
+3. ~~**Array Support**: Implement DIM and array index operations~~ ✓ Implemented via cbmruntime.DIM()
 4. **Sys Statements**: Map to Python's system calls
 5. **Poke/Peek**: Map to Python memory operations
 6. **Save/Load**: Implement file I/O utilities
 7. **Documentation**: Allow automatic documentation generation
 8. **Variable Reference Tracking**: Provide mapping between BASIC and Python variables
+9. **Extended BASIC Functions**: Additional C64 BASIC functions (PEEK, POKE, SYS, SIN, COS, etc.)
 
 ## Related Components
 
 This tool is Phase 2 of the cbmbas2py translator project. It builds upon:
 - Phase 1: `petscii2text.py` - PRG to UTF-8 text converter
+- **Runtime Library**: `cbmruntime.py` - BASIC function implementations (PRINT, LEN, MID$, INT, RND, TAB, FOR/NEXT loops, DIM arrays, PETSCII terminal translation)
 - Related tools for C64 program analysis and conversion
 
 ## Version History
 
 - **v0.1**: Initial state machine-based translator specification
+- **v0.2**: Added cbmruntime.py runtime library with BASIC function implementations (LEN, MID$, INT, RND, TAB, FOR/NEXT, DIM, cbmprint with PETSCII terminal translation). Added `_l` suffix for arrays to distinguish from scalar variables with the same name.
