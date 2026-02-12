@@ -193,6 +193,9 @@ def cbmprint(*args, **kvargs):
 		cbmtext += "\n"
 	print(outtext, **kvargs)
 
+def cbminput():
+	return input().upper()
+
 if __name__ == "__main__":
 	print("_term_bg:", _term_bg.replace('\x1b', 'ESC'))
 	print("_term_fg:", _term_fg.replace('\x1b', 'ESC'))
