@@ -1299,9 +1299,9 @@ class PythonCodeGenerator:
 			# Track the input variable
 			self.variables.add(py_var)
 			if var.endswith('$'):
-				lines.append(f'{py_var} = input()')
+				lines.append(f'{py_var} = cbminput()')
 			else:
-				lines.append(f'{py_var} = float(input())')
+				lines.append(f'{py_var} = float(cbminput())')
 
 		return lines
 
