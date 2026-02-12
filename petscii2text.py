@@ -139,6 +139,16 @@ PETSCII_TO_UTF8_VISUAL = {
 	0xDC: "🮌", 0xDD: "│", 0xDE: "π", 0xDF: "◥",
 }
 
+PETSCII_TO_UTF8_V2 = {
+#	0xa3: 0x2594,
+#	0xa4: 0x2581,
+#	0xa5: 0x258f,
+#	0xa7: 0x2595,
+#	0xb7: 0x2594,
+#	0xb4: 0x258f,
+#	0xaa: 0x2595,
+#	0xaf: 0x2581,
+}
 
 PETSCII_TO_UTF8_ESCAPED = {
 	0x20: " ", 0x21: "!", 0x22: '"', 0x23: "#", 0x24: "$", 0x25: "%",
@@ -348,6 +358,8 @@ class BasicDetokenizer:
 	def _petscii_to_utf8(self, byte: int) -> str:
 		"""Convert a single PETSCII byte to UTF-8 string."""
 		if self.graphics_strategy == "visual":
+			if byte in PETSCII_TO_UTF8_V2:
+				return chr(PETSCII_TO_UTF8_V2[byte])
 			if byte in PETSCII_TO_UTF8_VISUAL:
 				return PETSCII_TO_UTF8_VISUAL[byte]
 		else:
