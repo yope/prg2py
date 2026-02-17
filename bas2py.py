@@ -389,16 +389,6 @@ class StateMachineAnalyzer:
 
 		self.coordinates_are_targets[target_coord] = True
 
-	def _record_gosub(self, gosub_coord: Tuple[int, int], target_coord: Tuple[int, int]):
-		"""Record GOSUB coordinate and push to stack.
-
-		Args:
-			gosub_coord: (line, index) of GOSUB statement
-			target_coord: (line, index) of destination
-		"""
-		self.gosub_stack.append(gosub_coord)
-		self.return_stack.append(target_coord)
-
 	def _get_return_target(self) -> Tuple[int, int]:
 		"""Get return target from stack.
 
