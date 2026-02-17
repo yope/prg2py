@@ -82,6 +82,12 @@ def TAB(x):
 	# involved. For now assume TAB(x) will actually result in cursor movement.
 	return f"\r\x1b[{x}C"
 
+def PEEK(addr):
+	return _sys.read(int(addr))
+
+def POKE(addr, data):
+	_sys.write(int(addr), int(data))
+
 def ON_GOTO(default, cond, states):
 	cond = int(cond)
 	if cond < 1:
