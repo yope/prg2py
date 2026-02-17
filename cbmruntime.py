@@ -122,7 +122,7 @@ _term_bg = "\x1b[48;2;0;0;0m"
 #	0x96: "LIGHT-RED", 0x97: "DARK-GREY", 0x98: "GREY-1", 0x99: "LIGHT-GREEN",
 #	0x9A: "LIGHT-BLUE", 0x9B: "LIGHT-GREY", 0x9C: "PURPLE", 0x9D: "CRSOR-LEFT",
 #	0x9E: "YELLOW", 0x9F: "CYAN", 0xA0: "SPACE", 0xA1: "SHIFT-SPACE",
-_colors = {
+_colors2rgb = {
 	"BLACK": (0, 0, 0),
 	"WHITE": (255, 255, 255),
 	"RED": (152, 48, 48),
@@ -141,6 +141,27 @@ _colors = {
 	"LIGHT-GREY": (160, 160, 160),
 }
 
+_colors2vic = {
+	"BLACK": 0,
+	"WHITE": 1,
+	"RED": 2,
+	"CYAN": 3,
+	"PURPLE": 4,
+	"GREEN": 5,
+	"BLUE": 6,
+	"YELLOW": 7,
+	"ORANGE": 8,
+	"BROWN": 9,
+	"LIGHT-RED": 10,
+	"DARK-GREY": 11,
+	"GREY": 12,
+	"LIGHT-GREEN": 13,
+	"LIGHT-BLUE": 14,
+	"LIGHT-GREY": 15
+}
+
+_vic2color = {vic:color for color, vic in _colors2vic.items()}
+
 _cursor_codes = {
 	"CRSR-UP": "\x1b[1A",
 	"CRSR-DOWN": "\x1b[1B",
@@ -151,7 +172,7 @@ _cursor_codes = {
 }
 
 def _mkansi(color):
-	r, g, b = _colors[color]
+	r, g, b = _colors2rgb[color]
 	return f';2;{r};{g};{b}m'
 
 def _screen2ansi():
@@ -182,8 +203,9 @@ def _cbm_ctrl(code):
 	global _screen_bg
 	global _rvs
 	out = ""
-	if code in _colors:
+	if code in _colors2rgb:
 		_screen_fg = code
+		_sys.write(646, _colors2vic[code])
 		out = _screen2ansi()
 	elif code == "RVS-ON":
 		if not _rvs:
@@ -205,6 +227,12 @@ def _code_match(m):
 
 def cbmprint(*args, **kvargs):
 	global _rvs
+	global _screen_fg
+	viccolor = _sys.read(646)
+	new_fg = _vic2color[viccolor]
+	if new_fg != _screen_fg:
+		_screen_fg = new_fg
+		print(_screen2ansi(), end="")
 	cbmtext = "".join([str(arg) for arg in args])
 	outtext = re.sub(r"\{([a-zA-Z0-9\-\\]+)\}", _code_match, cbmtext)
 	if _rvs and "end" not in kvargs:
