@@ -1020,6 +1020,9 @@ class PythonCodeGenerator:
 		elif stmt_type == 'DIM':
 			return self._convert_dim(content)
 
+		elif stmt_type == 'POKE':
+			return self._convert_poke(content)
+
 		elif stmt_type == 'ON':
 			return self._convert_on_go(content, coord)
 
@@ -1579,6 +1582,14 @@ class PythonCodeGenerator:
 			lines.append(f"{name} = DIM({dimtype}, {dims})")
 			self.auto_dim.discard(name)
 		return lines
+
+	def _convert_poke(self, content: str) -> List[str]:
+		content = content[4:] # Strip 'POKE'
+		addr_exp, val_exp = content.strip().split(",")
+		addr = self._convert_expression(addr_exp.strip())
+		val = self._convert_expression(val_exp.strip())
+		print(f'POKE({addr}, {val})')
+		return [f'POKE({addr}, {val})']
 
 	def _convert_on_go(self, content: str, coord: Tuple[int, int]) -> List[str]:
 		content = content[2:] # Strip 'ON'
