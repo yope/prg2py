@@ -82,6 +82,17 @@ def TAB(x):
 	# involved. For now assume TAB(x) will actually result in cursor movement.
 	return f"\r\x1b[{x}C"
 
+def ON_GOTO(default, cond, states):
+	cond = int(cond)
+	if cond < 1:
+		return default
+	if cond > len(states):
+		return default
+	return states[cond - 1]
+
+def ON_GOSUB(default, cond, states):
+	return ON_GOTO(default, cond, states)
+
 def autodim(glob, *varnames):
 	for v in varnames:
 		dimtype = "" if '_s' in v else 0
