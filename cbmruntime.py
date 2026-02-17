@@ -3,6 +3,9 @@ import re
 import time
 import copy
 import random
+from cbmmemory import SystemBus
+
+_sys = SystemBus()
 
 def LEN(x):
 	return len(x)
