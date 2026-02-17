@@ -184,7 +184,8 @@ class BASICParser:
 
 		# List of statement keywords in order of priority
 		keywords = ['REM', 'INPUT', 'PRINT', 'FOR', 'NEXT', 'GOTO', 'GOSUB',
-					'RETURN', 'IF', 'DATA', 'DIM', 'END', 'READ', 'PASS']
+				'RETURN', 'IF', 'DATA', 'DIM', 'END', 'READ', 'POKE',
+				'ON', 'PASS']
 
 		# Check each keyword
 		for keyword in keywords:
@@ -355,6 +356,9 @@ class StateMachineAnalyzer:
 				elif stmt_type == 'NEXT':
 					self._handle_next_statement(coord)
 
+				elif stmt_type == 'ON':
+					self._handle_on_statement(coord, stmt_content)
+
 	def _parse_goto_target(self, goto_content: str) -> Tuple[int, int]:
 		"""Parse GOTO or GOSUB target and get statement index.
 
@@ -489,6 +493,32 @@ class StateMachineAnalyzer:
 
 		# The FOR statement continues to next statement (same line, next index)
 		self.jump_targets[this_coord] = [next_coord]
+
+	def _handle_on_statement(self, on_coord: Tuple[int, int], content):
+		"""Handle ON_GOSUB statement - mark statement following it as return target.
+
+		Args:
+			on_coord: (line, index) of FOR statement
+		"""
+
+		if "GOSUB" in content:
+			# Mark statement after ON as return target (GOSUB case)
+			next_coord = self._get_next_coordinates(on_coord)
+			self.coordinates_are_targets[next_coord] = True
+			self.jump_targets[on_coord] = [next_coord]
+			ontype = "GOSUB"
+		else:
+			self.jump_targets[on_coord] = [] # We'll append to this below
+			ontype = "GOTO"
+		all_targets = content.split(ontype, 1)[1].strip()
+		if ',' in all_targets:
+			str_targets = all_targets.split(',')
+		else:
+			str_targets = [all_targets]
+		target_lines = [int(x) for x in str_targets]
+		for line in target_lines:
+			self.coordinates_are_targets[(line, 0)] = True
+			self.jump_targets[on_coord].append((line, 0))
 
 	def get_state_mapping(self) -> Dict[str, dict]:
 		"""Generate unique state names for all coordinates.
@@ -918,7 +948,7 @@ class PythonCodeGenerator:
 			True if code contains continue/break/return that ends execution
 		"""
 		# Statement types that always have control flow
-		if stmt_type in ['GOTO', 'GOSUB', 'RETURN', 'END', 'NEXT']:
+		if stmt_type in ['GOTO', 'GOSUB', 'RETURN', 'END', 'NEXT', 'ON']:
 			return True
 
 		# IF statements with GOTO targets have control flow
@@ -999,6 +1029,9 @@ class PythonCodeGenerator:
 
 		elif stmt_type == 'DIM':
 			return self._convert_dim(content)
+
+		elif stmt_type == 'ON':
+			return self._convert_on_go(content, coord)
 
 		elif stmt_type == 'PASS':
 			return ['# :']
@@ -1555,6 +1588,28 @@ class PythonCodeGenerator:
 			dims = ", ".join([str(d) for d in dim])
 			lines.append(f"{name} = DIM({dimtype}, {dims})")
 			self.auto_dim.discard(name)
+		return lines
+
+	def _convert_on_go(self, content: str, coord: Tuple[int, int]) -> List[str]:
+		content = content[2:] # Strip 'ON'
+		next_line, next_index = self._get_next_coordinates(coord)
+		next_state = f'line_{next_line}_index_{next_index}'
+		if "GOTO" in content:
+			cond, targets = content.split("GOTO")
+			py_func = "ON_GOTO"
+		else: # GOSUB
+			cond, targets = content.split("GOSUB")
+			lines = [f'gosub_stack.append("{next_state}")']
+			py_func = "ON_GOSUB"
+		py_cond = self._convert_expression(cond)
+		if not "," in targets:
+			py_targets = [int(targets)]
+		else:
+			py_targets = [int(x) for x in targets.split(",")]
+		target_states = [f'line_{x}_index_0' for x in py_targets]
+		if py_func == "ON_GOTO":
+			return [f'state = {py_func}({next_state!r}, {py_cond}, {target_states!r})']
+		lines.append(f'state = {py_func}({next_state!r}, {py_cond}, {target_states!r})')
 		return lines
 
 	def _convert_variable(self, var: str, onlyname: bool = False) -> str:
