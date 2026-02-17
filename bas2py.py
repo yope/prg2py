@@ -1544,7 +1544,6 @@ class PythonCodeGenerator:
 	def _convert_dim(self, content: str) -> List[str]:
 		"""Convert DIM statement to list variable declarations."""
 		content = content[3:] # Strip 'DIM'
-		print(f"DIM var list: {content}")
 		varlist = []
 		parens = False
 		var = ''
