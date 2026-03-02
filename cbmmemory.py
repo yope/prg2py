@@ -8,9 +8,9 @@ class MemMappedDevice:
 		self.mem = bytearray(size)
 
 	def read(self, addr: int):
-		if addr < self.base or self.addr > top:
+		if addr < self.base or addr > self.top:
 			return None
-		return self.mem[addr - base]
+		return self.mem[addr - self.base]
 
 	def write(self, addr: int, data: int):
 		if addr < self.base or addr > self.top:
