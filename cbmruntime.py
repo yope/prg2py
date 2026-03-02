@@ -122,45 +122,9 @@ _term_bg = "\x1b[48;2;0;0;0m"
 #	0x96: "LIGHT-RED", 0x97: "DARK-GREY", 0x98: "GREY-1", 0x99: "LIGHT-GREEN",
 #	0x9A: "LIGHT-BLUE", 0x9B: "LIGHT-GREY", 0x9C: "PURPLE", 0x9D: "CRSOR-LEFT",
 #	0x9E: "YELLOW", 0x9F: "CYAN", 0xA0: "SPACE", 0xA1: "SHIFT-SPACE",
-_colors2rgb = {
-	"BLACK": (0, 0, 0),
-	"WHITE": (255, 255, 255),
-	"RED": (152, 48, 48),
-	"CYAN": (160, 224, 224),
-	"PURPLE": (168, 120, 176),
-	"GREEN": (128, 192, 96),
-	"BLUE": (80, 128, 192),
-	"YELLOW": (224, 216, 112),
-	"ORANGE": (208, 144, 64),
-	"BROWN": (112, 88, 56),
-	"LIGHT-RED": (240, 80, 80),
-	"DARK-GREY": (96, 96, 96),
-	"GREY": (120, 120, 120),
-	"LIGHT-GREEN": (176, 240, 144),
-	"LIGHT-BLUE": (184, 184, 224),
-	"LIGHT-GREY": (160, 160, 160),
-}
-
-_colors2vic = {
-	"BLACK": 0,
-	"WHITE": 1,
-	"RED": 2,
-	"CYAN": 3,
-	"PURPLE": 4,
-	"GREEN": 5,
-	"BLUE": 6,
-	"YELLOW": 7,
-	"ORANGE": 8,
-	"BROWN": 9,
-	"LIGHT-RED": 10,
-	"DARK-GREY": 11,
-	"GREY": 12,
-	"LIGHT-GREEN": 13,
-	"LIGHT-BLUE": 14,
-	"LIGHT-GREY": 15
-}
-
-_vic2color = {vic:color for color, vic in _colors2vic.items()}
+_color2rgb = _sys.vic2.color2rgb
+_color2vic = _sys.vic2.color2vic
+_vic2color = _sys.vic2.vic2color
 
 _cursor_codes = {
 	"CRSR-UP": "\x1b[1A",
@@ -172,7 +136,7 @@ _cursor_codes = {
 }
 
 def _mkansi(color):
-	r, g, b = _colors2rgb[color]
+	r, g, b = _color2rgb[color]
 	return f';2;{r};{g};{b}m'
 
 def _screen2ansi():
@@ -203,9 +167,9 @@ def _cbm_ctrl(code):
 	global _screen_bg
 	global _rvs
 	out = ""
-	if code in _colors2rgb:
+	if code in _color2rgb:
 		_screen_fg = code
-		_sys.write(646, _colors2vic[code])
+		_sys.write(646, _color2vic[code])
 		out = _screen2ansi()
 	elif code == "RVS-ON":
 		if not _rvs:
