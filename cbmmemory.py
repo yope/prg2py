@@ -73,6 +73,13 @@ class VICII(MemMappedDevice):
 		self.vm = bytearray(1000)
 		self.color = bytearray(1000)
 		self.color_base = 0xd800
+		self.output_enabled = True
+
+	def disable_output(self):
+		self.output_enabled = False
+
+	def enable_output(self):
+		self.output_enabled = True
 
 	def write(self, addr: int, data: int):
 		ret = super().write(addr, data)
@@ -93,7 +100,8 @@ class VICII(MemMappedDevice):
 		else:
 			off = addr - self.color_base
 			self.color[off] = data & 0x0f # Color RAM is 4-bit wide
-		self.refresh_code(off)
+		if self.output_enabled:
+			self.refresh_code(off)
 
 	def refresh_code(self, off):
 		fg = self.color[off]
