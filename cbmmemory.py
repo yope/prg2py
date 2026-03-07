@@ -1,4 +1,6 @@
 
+from cbmgraphics import BlockMap
+
 screen2utf8 = {
 	0: '@',
 	32: ' ',
@@ -67,6 +69,39 @@ class VICII(MemMappedDevice):
 		super().__init__(base, size)
 		self.vic2color = {vic:color for color, vic in self.color2vic.items()}
 		self.vic2rgb = {vic:self.color2rgb[self.vic2color[vic]] for vic in self.vic2color}
+		self.output = BlockMap(320, 200)
+		self.vm = bytearray(1000)
+		self.color = bytearray(1000)
+		self.color_base = 0xd800
+
+	def write(self, addr: int, data: int):
+		ret = super().write(addr, data)
+		if ret is not None:
+			return ret
+		ptrs = self.mem[0x18]
+		vmstart = (ptrs & 0xf0) << 6
+		if addr < vmstart:
+			return None
+		vmend = vmstart + 1000
+		if addr > vmend and addr < self.color_base:
+			return None
+		if addr > (self.color_base + 1000):
+			return None
+		if addr < self.color_base:
+			off = addr - vmstart
+			self.vm[off] = data
+		else:
+			off = addr - self.color_base
+			self.color[off] = data & 0x0f # Color RAM is 4-bit wide
+		self.refresh_code(off)
+
+	def refresh_code(self, off):
+		fg = self.color[off]
+		code = self.vm[off]
+		bg = self.mem[0x21]
+		x = off % 40
+		y = off // 40
+		self.output.draw_code_xy(x, y, fg, bg, code)
 
 class SID(MemMappedDevice):
 	pass
@@ -168,7 +203,11 @@ class SystemBus:
 		self.ram[646] = 0x0e # Cursor color light-blue
 		self.write(53280, 14)
 		self.write(53281, 6)
-		self.textscreen = VicTextScreen(0x0400, 0xd800, self.ram, self.color, self.vic2)
+		self.write(0xd018, 0x15)
+		#self.textscreen = VicTextScreen(0x0400, 0xd800, self.ram, self.color, self.vic2)
+		for i in range(1000):
+			self.write(0x0400 + i, 32)
+			self.write(0xd800 + i, 14)
 
 	def write_ram(self, addr: int, data: int):
 		self.ram[addr] = data
