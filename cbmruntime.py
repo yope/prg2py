@@ -189,7 +189,7 @@ def _cbm_ctrl(code):
 def _code_match(m):
 	return _cbm_ctrl(m.group(1))
 
-def cbmprint(*args, **kvargs):
+def cbmprint_simple(*args, **kvargs):
 	global _rvs
 	global _screen_fg
 	viccolor = _sys.read(646)
@@ -207,6 +207,61 @@ def cbmprint(*args, **kvargs):
 
 def cbminput():
 	return input().upper()
+
+_ZP_COLUMN = 211
+_ZP_QUOTE = 212
+_ZP_LINE = 214
+_ZP_INSERT = 216
+
+def cbmprint_vic(*args, **kvargs):
+	def inc_line(line):
+		line += 1
+		if line >= 25:
+			for i in range(1, 25):
+				for j in range(40):
+					src = i * 40 + j
+					dst = src - 40
+					POKE(1024 + dst, PEEK(1024 + src))
+					POKE(55296 + dst, PEEK(55296 + src))
+			for j in range(40):
+				POKE(1024 + j + 24*40, 32)
+			line = 24
+		return line
+
+	def inc_col(col, line):
+		col += 1
+		if col >= 40:
+			col = 0
+			line = inc_line(line)
+		return col, line
+
+	quote = PEEK(_ZP_QUOTE)
+	line = PEEK(_ZP_LINE)
+	col = PEEK(_ZP_COLUMN)
+	try:
+		end = kvargs["end"]
+	except KeyError:
+		end = "\n"
+	cbmtext = "".join([str(arg) for arg in args]) + end
+	i = 0
+	while i < len(cbmtext):
+		c = cbmtext[i]
+		if c == '\r' or c == '\n' and not quote:
+			line = inc_line(line)
+			col = 0
+		else:
+			code = _sys.vic2.output.petscii2code(ord(c) & 255)
+			color = PEEK(646)
+			off = line * 40 + col
+			POKE(1024 + off, code)
+			POKE(55296 + off, color)
+			col, line = inc_col(col, line)
+		i += 1
+	POKE(_ZP_COLUMN, col)
+	POKE(_ZP_LINE, line)
+	POKE(_ZP_QUOTE, quote)
+
+cbmprint = cbmprint_vic
 
 if __name__ == "__main__":
 	print("_term_bg:", _term_bg.replace('\x1b', 'ESC'))
