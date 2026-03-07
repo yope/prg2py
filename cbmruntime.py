@@ -221,7 +221,9 @@ def cbmprint_vic(*args, **kvargs):
 				for j in range(40):
 					src = i * 40 + j
 					dst = src - 40
+					_sys.vic2.disable_output()
 					POKE(1024 + dst, PEEK(1024 + src))
+					_sys.vic2.enable_output()
 					POKE(55296 + dst, PEEK(55296 + src))
 			for j in range(40):
 				POKE(1024 + j + 24*40, 32)
@@ -253,7 +255,9 @@ def cbmprint_vic(*args, **kvargs):
 			code = _sys.vic2.output.petscii2code(ord(c) & 255)
 			color = PEEK(646)
 			off = line * 40 + col
+			_sys.vic2.disable_output()
 			POKE(1024 + off, code)
+			_sys.vic2.enable_output()
 			POKE(55296 + off, color)
 			col, line = inc_col(col, line)
 		i += 1
