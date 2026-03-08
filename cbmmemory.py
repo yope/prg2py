@@ -120,6 +120,11 @@ class VICII(MemMappedDevice):
 		y = off // 40
 		self.output.draw_code_xy(x, y, fg, bg, code)
 
+	def clear_screen(self, color):
+		for i in range(1000):
+			self.write(0x0400 + i, 32)
+			self.write(0xd800 + i, color)
+
 class SID(MemMappedDevice):
 	pass
 
@@ -222,9 +227,7 @@ class SystemBus:
 		self.write(53281, 6)
 		self.write(0xd018, 0x15)
 		#self.textscreen = VicTextScreen(0x0400, 0xd800, self.ram, self.color, self.vic2)
-		for i in range(1000):
-			self.write(0x0400 + i, 32)
-			self.write(0xd800 + i, 14)
+		self.vic2.clear_screen(14)
 
 	def write_ram(self, addr: int, data: int):
 		self.ram[addr] = data
