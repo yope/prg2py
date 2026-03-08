@@ -4,6 +4,10 @@ import time
 import copy
 import random
 from cbmmemory import SystemBus
+from petscii2text import CONTROL_CODES, PETSCII_TO_UTF8_VISUAL
+
+_TAG_TO_PETSCII = {x: y for y, x in CONTROL_CODES.items()}
+_UTF8_TO_PETSCII = str.maketrans({x: y for y, x in PETSCII_TO_UTF8_VISUAL.items()})
 
 _sys = SystemBus()
 
@@ -76,11 +80,7 @@ def RND(x):
 	return random.random()
 
 def TAB(x):
-	# FIXME: If the result of TAB(x) would be a position left of the actual
-	# cursor position, the cursor should stay where it is. This requires
-	# cursor position tracking or querying the terminal, which is more
-	# involved. For now assume TAB(x) will actually result in cursor movement.
-	return f"\r\x1b[{x}C"
+	return f"{{TAB={x}}}"
 
 def PEEK(addr):
 	return _sys.read(int(addr))
@@ -208,25 +208,35 @@ def cbmprint_simple(*args, **kvargs):
 def cbminput():
 	return input().upper()
 
+_ZP_REVERSE = 199
 _ZP_COLUMN = 211
 _ZP_QUOTE = 212
 _ZP_LINE = 214
 _ZP_INSERT = 216
 
+def _tag2petscii(m):
+	tag = m.group(1)
+	try:
+		ret = chr(_TAG_TO_PETSCII[tag])
+	except KeyError:
+		ret = f"{{{tag}}}"
+	return ret
+
 def cbmprint_vic(*args, **kvargs):
 	def inc_line(line):
 		line += 1
 		if line >= 25:
+			_sys.vic2.disable_output()
 			for i in range(1, 25):
 				for j in range(40):
 					src = i * 40 + j
 					dst = src - 40
-					_sys.vic2.disable_output()
 					POKE(1024 + dst, PEEK(1024 + src))
-					_sys.vic2.enable_output()
 					POKE(55296 + dst, PEEK(55296 + src))
 			for j in range(40):
 				POKE(1024 + j + 24*40, 32)
+			_sys.vic2.enable_output()
+			_sys.vic2.refresh_screen()
 			line = 24
 		return line
 
@@ -240,19 +250,97 @@ def cbmprint_vic(*args, **kvargs):
 	quote = PEEK(_ZP_QUOTE)
 	line = PEEK(_ZP_LINE)
 	col = PEEK(_ZP_COLUMN)
+	rvs = PEEK(_ZP_REVERSE)
 	try:
 		end = kvargs["end"]
 	except KeyError:
 		end = "\n"
 	cbmtext = "".join([str(arg) for arg in args]) + end
+	cbmtext = re.sub(r"\{([a-zA-Z0-9\-\\]+)\}", _tag2petscii, cbmtext).translate(_UTF8_TO_PETSCII)
 	i = 0
 	while i < len(cbmtext):
 		c = cbmtext[i]
 		if c == '\r' or c == '\n' and not quote:
 			line = inc_line(line)
 			col = 0
+		elif c == '{':
+			endidx = cbmtext.find('}', i + 1)
+			if endidx == -1:
+				raise ValueError
+			tag = cbmtext[i + 1:endidx]
+			if '=' in tag:
+				tag, arg = tag.split('=')
+			else:
+				arg = ''
+			if tag == "TAB":
+				col = max(int(arg), col)
+			i = endidx
+			if i >= len(cbmtext):
+				break
+		elif c == '\x05':
+			POKE(646, 1)
+		elif c == '\x11':
+			line = inc_line(line)
+		elif c == '\x12':
+			rvs = 1
+		elif c == '\x13':
+			col = line = 0
+		elif c == '\x14':
+			# backspace
+			pass
+		elif c == '\x1c':
+			POKE(646, 2)
+		elif c == '\x1d':
+			col, line = inc_col(col, line)
+		elif c == '\x1e':
+			POKE(646, 5)
+		elif c == '\x1f':
+			POKE(646, 6)
+		elif c == '\x81':
+			POKE(646, 8)
+		elif c == '\x90':
+			POKE(646, 0)
+		elif c == '\x91':
+			line = max(line - 1, 0)
+		elif c == '\x92':
+			rvs = 0
+		elif c == '\x93':
+			col = line = 0
+			_sys.vic2.clear_screen(PEEK(646))
+		elif c == '\x94':
+			# insert
+			pass
+		elif c == '\x95':
+			POKE(646, 9)
+		elif c == '\x96':
+			POKE(646, 10)
+		elif c == '\x97':
+			POKE(646, 11)
+		elif c == '\x98':
+			POKE(646, 12)
+		elif c == '\x99':
+			POKE(646, 13)
+		elif c == '\x9a':
+			POKE(646, 14)
+		elif c == '\x9b':
+			POKE(646, 15)
+		elif c == '\x9c':
+			POKE(646, 4)
+		elif c == '\x9d':
+			col -= 1
+			if col < 0 and line > 0:
+				col = 39
+				line = line - 1
+			elif line == 0:
+				col = 0
+		elif c == '\x9e':
+			POKE(646, 7)
+		elif c == '\x9f':
+			POKE(646, 3)
 		else:
 			code = _sys.vic2.output.petscii2code(ord(c) & 255)
+			if rvs:
+				code |= 0x80
 			color = PEEK(646)
 			off = line * 40 + col
 			_sys.vic2.disable_output()
@@ -264,6 +352,7 @@ def cbmprint_vic(*args, **kvargs):
 	POKE(_ZP_COLUMN, col)
 	POKE(_ZP_LINE, line)
 	POKE(_ZP_QUOTE, quote)
+	POKE(_ZP_REVERSE, 0) # BASIC print always disabled RVS at the end?
 
 cbmprint = cbmprint_vic
 
