@@ -47,6 +47,13 @@ class BlockMap:
 		self._term_y = -1
 		with open('chargen.rom', 'rb') as f:
 			self.font = f.read()
+		self.output_enabled = True
+
+	def enable_output(self):
+		self.output_enabled = True
+
+	def disable_output(self):
+		self.output_enabled = False
 
 	def _colorcode(self, c):
 		try:
@@ -132,6 +139,9 @@ class BlockMap:
 	def clear(self, c):
 		for i in range(self.width * self.height):
 			self.pixels[i] = c
+		self.refresh_screen()
+
+	def refresh_screen(self):
 		for y in range(self.termheight):
 			for x in range(self.termwidth):
 				self.refresh_code(x, y)
@@ -143,6 +153,8 @@ class BlockMap:
 			for x in range(8):
 				self.pixels[off + x] = fg if data[y] & (128 >> x) else bg
 			off += stride
+		if not self.output_enabled:
+			return
 		cpx0 = floor((cx * 8) / self.xdiv)
 		cpx1 = ceil((cx * 8 + 8) / self.xdiv)
 		cpy0 = floor((cy * 8) / self.ydiv)
