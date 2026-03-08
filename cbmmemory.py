@@ -77,9 +77,18 @@ class VICII(MemMappedDevice):
 
 	def disable_output(self):
 		self.output_enabled = False
+		self.output.disable_output()
 
 	def enable_output(self):
 		self.output_enabled = True
+		self.output.enable_output()
+
+	def refresh_screen(self):
+		self.output.disable_output()
+		for off in range(1000):
+			self.refresh_code(off)
+		self.output.enable_output()
+		self.output.refresh_screen()
 
 	def write(self, addr: int, data: int):
 		ret = super().write(addr, data)
